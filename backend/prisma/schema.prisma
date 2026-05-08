@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  active
+  warning
+  suspended
+}
+
+enum ItemStatus {
+  available
+  matching
+  completed
+  canceled
+}
+
+enum TransactionStatus {
+  proposing
+  scheduled
+  completed
+  canceled
+}
+
+enum EvaluationType {
+  good
+  bad
+  cancel
+  no_show
+}
+
+enum NotificationType {
+  action_required
+  info
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique
+  nickname     String
+  credit_score Int        @default(100)
+  status       UserStatus @default(active)
+  created_at   DateTime   @default(now())
+  updated_at   DateTime   @updatedAt
+
+  items             Item[]
+  sales             Transaction[]      @relation("SellerTransactions")
+  purchases         Transaction[]      @relation("BuyerTransactions")
+  proposalsSent     ScheduleProposal[] @relation("SenderProposals")
+  messagesSent      Message[]          @relation("SenderMessages")
+  evaluationsTarget Evaluation[]       @relation("TargetEvaluations")
+  evaluationsGiven  Evaluation[]       @relation("ReviewerEvaluations")
+  notifications     Notification[]
+
+  @@map("users")
+}
+
+model Item {
+  id         String     @id @default(uuid()) @db.Uuid
+  seller_id  String     @db.Uuid
+  seller     User       @relation(fields: [seller_id], references: [id])
+  title      String
+  price      Int        @default(0)
+  image_url  String?
+  status     ItemStatus @default(available)
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  transactions Transaction[]
+
+  @@map("items")
+}
+
+model Transaction {
+  id               String            @id @default(uuid()) @db.Uuid
+  item_id          String            @db.Uuid
+  item             Item              @relation(fields: [item_id], references: [id])
+  seller_id        String            @db.Uuid
+  seller           User              @relation("SellerTransactions", fields: [seller_id], references: [id])
+  buyer_id         String            @db.Uuid
+  buyer            User              @relation("BuyerTransactions", fields: [buyer_id], references: [id])
+  status           TransactionStatus @default(proposing)
+  meeting_datetime DateTime?
+  meeting_place    String?
+  seller_evaluated Boolean           @default(false)
+  buyer_evaluated  Boolean           @default(false)
+  created_at       DateTime          @default(now())
+  updated_at       DateTime          @updatedAt
+
+  proposals   ScheduleProposal[]
+  messages    Message[]
+  evaluations Evaluation[]
+
+  @@map("transactions")
+}
+
+model ScheduleProposal {
+  id                String      @id @default(uuid()) @db.Uuid
+  transaction_id    String      @db.Uuid
+  transaction       Transaction @relation(fields: [transaction_id], references: [id])
+  sender_id         String      @db.Uuid
+  sender            User        @relation("SenderProposals", fields: [sender_id], references: [id])
+  proposed_datetime DateTime
+  proposed_place    String
+  is_accepted       Boolean     @default(false)
+  created_at        DateTime    @default(now())
+  updated_at        DateTime    @updatedAt
+
+  @@map("schedule_proposals")
+}
+
+model Message {
+  id             String      @id @default(uuid()) @db.Uuid
+  transaction_id String      @db.Uuid
+  transaction    Transaction @relation(fields: [transaction_id], references: [id])
+  sender_id      String      @db.Uuid
+  sender         User        @relation("SenderMessages", fields: [sender_id], references: [id])
+  content        String
+  created_at     DateTime    @default(now())
+  updated_at     DateTime    @updatedAt
+
+  @@map("messages")
+}
+
+model Evaluation {
+  id             String         @id @default(uuid()) @db.Uuid
+  transaction_id String         @db.Uuid
+  transaction    Transaction    @relation(fields: [transaction_id], references: [id])
+  target_user_id String         @db.Uuid
+  target_user    User           @relation("TargetEvaluations", fields: [target_user_id], references: [id])
+  reviewer_id    String?        @db.Uuid
+  reviewer       User?          @relation("ReviewerEvaluations", fields: [reviewer_id], references: [id])
+  score_change   Int
+  type           EvaluationType
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @updatedAt
+
+  @@map("evaluations")
+}
+
+model Notification {
+  id             String           @id @default(uuid()) @db.Uuid
+  user_id        String           @db.Uuid
+  user           User             @relation(fields: [user_id], references: [id])
+  title          String
+  type           NotificationType
+  transaction_id String?          @db.Uuid
+  is_read        Boolean          @default(false)
+  created_at     DateTime         @default(now())
+  updated_at     DateTime         @updatedAt
+
+  @@map("notifications")
+}
