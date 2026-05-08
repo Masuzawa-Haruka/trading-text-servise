@@ -13,7 +13,7 @@ CREATE TYPE notification_type AS ENUM ('action_required', 'info');
 
 -- 1. Users
 CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(), -- Supabase Authの id と一致させる場合は REFERENCES auth.users(id) が推奨されます
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email VARCHAR UNIQUE NOT NULL,
     nickname VARCHAR NOT NULL,
     credit_score INT DEFAULT 100,
@@ -24,7 +24,7 @@ CREATE TABLE users (
 
 -- 2. Items
 CREATE TABLE items (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     seller_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR NOT NULL,
     price INT DEFAULT 0,
@@ -36,7 +36,7 @@ CREATE TABLE items (
 
 -- 3. Transactions
 CREATE TABLE transactions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     item_id UUID NOT NULL REFERENCES items(id) ON DELETE CASCADE,
     seller_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     buyer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -51,7 +51,7 @@ CREATE TABLE transactions (
 
 -- 4. Schedule Proposals
 CREATE TABLE schedule_proposals (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     transaction_id UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
     sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     proposed_datetime TIMESTAMPTZ NOT NULL,
@@ -63,7 +63,7 @@ CREATE TABLE schedule_proposals (
 
 -- 5. Messages
 CREATE TABLE messages (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     transaction_id UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
     sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
@@ -73,7 +73,7 @@ CREATE TABLE messages (
 
 -- 6. Evaluations
 CREATE TABLE evaluations (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     transaction_id UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
     target_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     reviewer_id UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -85,7 +85,7 @@ CREATE TABLE evaluations (
 
 -- 7. Notifications
 CREATE TABLE notifications (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR NOT NULL,
     type notification_type NOT NULL,
@@ -212,3 +212,23 @@ CREATE TRIGGER update_transactions_modtime BEFORE UPDATE ON transactions FOR EAC
 CREATE TRIGGER update_schedule_proposals_modtime BEFORE UPDATE ON schedule_proposals FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_evaluations_modtime BEFORE UPDATE ON evaluations FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_notifications_modtime BEFORE UPDATE ON notifications FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+
+-- ==========================================
+-- Auth Trigger (Auto-create public.users)
+-- ==========================================
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.users (id, email, nickname)
+  VALUES (
+    new.id,
+    new.email,
+    COALESCE(new.raw_user_meta_data->>'nickname', 'ゲストユーザー')
+  );
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
