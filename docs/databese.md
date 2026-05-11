@@ -11,6 +11,7 @@
 | `id` | UUID | PK | ユーザーID |
 | `email` | String | Unique | 大学メールアドレス（登録制限に使用） |
 | `nickname` | String | Not Null | アプリ内での表示名 |
+| `profile_image_url` | String | Nullable | アイコン等のプロフィール画像URL |
 | `credit_score` | Int | Default: 100（上限150） | 信用スコア |
 | `status` | Enum | Default: 'active' | active(通常), warning(警告), suspended(停止) |
 | `created_at` | DateTime |  | アカウント作成日時 |
@@ -25,6 +26,9 @@
 | `id` | UUID | PK | 出品アイテムID |
 | `seller_id` | UUID | FK (Users) | 出品者のユーザーID |
 | `title` | String | Not Null | 参考書のタイトル |
+| `description` | Text | Nullable | 商品の詳細説明（書き込み有無など） |
+| `condition` | Enum | Not Null | new(新品), used_good(目立った傷なし), used_bad(傷や書き込みあり) |
+| `category` | String | Nullable | 科目・カテゴリ（検索用） |
 | `price` | Int | Default: 0 | 価格（0円推奨） |
 | `image_url` | String | Nullable | 表紙などの画像URL |
 | `status` | Enum | Default: 'available' | available(募集中), matching(マッチング中・他者遮断), completed(取引完了), canceled(出品取消) |
@@ -41,6 +45,7 @@
 | `item_id` | UUID | FK (Items) | 対象の参考書ID |
 | `seller_id` | UUID | FK (Users) | 出品者のID |
 | `buyer_id` | UUID | FK (Users) | 購入者（受け取り側）のID |
+| `final_price` | Int | Nullable | 取引成立時点の価格スナップショット |
 | `status` | Enum | Default: 'proposing' | proposing(日程提案中), scheduled(日時確定/ボード解放), completed(完了), canceled(中止) |
 | `meeting_datetime` | DateTime | Nullable | 確定した待ち合わせ日時（提案承認後にUPDATE） |
 | `meeting_place` | String | Nullable | 確定した待ち合わせ場所（提案承認後にUPDATE） |
@@ -60,7 +65,7 @@
 | `sender_id` | UUID | FK (Users) | 提案を送信したユーザーID |
 | `proposed_datetime` | DateTime | Not Null | 候補の日時 |
 | `proposed_place` | String | Not Null | 候補の場所（テキストまたは固定値） |
-| `is_accepted` | Boolean | Default: false | 相手がこの日時を承認したか |
+| `status` | Enum | Default: 'pending' | pending(未回答), accepted(承認), rejected(拒否) |
 | `created_at` | DateTime |  | 提案の送信日時 |
 | `updated_at` | DateTime |  | 承認状態等の更新日時 |
 
