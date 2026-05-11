@@ -56,9 +56,9 @@ model User {
   nickname          String
   profile_image_url String?
   credit_score      Int        @default(100)
-  status       UserStatus @default(active)
-  created_at   DateTime   @default(now())
-  updated_at   DateTime   @updatedAt
+  status            UserStatus @default(active)
+  created_at        DateTime   @default(now())
+  updated_at        DateTime   @updatedAt
 
   items             Item[]
   sales             Transaction[]      @relation("SellerTransactions")
@@ -73,18 +73,18 @@ model User {
 }
 
 model Item {
-  id         String     @id @default(uuid()) @db.Uuid
-  seller_id  String     @db.Uuid
-  seller     User       @relation(fields: [seller_id], references: [id])
+  id          String        @id @default(uuid()) @db.Uuid
+  seller_id   String        @db.Uuid
+  seller      User          @relation(fields: [seller_id], references: [id])
   title       String
   description String?
   condition   ItemCondition @default(new)
   category    String?
   price       Int           @default(0)
   image_url   String?
-  status     ItemStatus @default(available)
-  created_at DateTime   @default(now())
-  updated_at DateTime   @updatedAt
+  status      ItemStatus    @default(available)
+  created_at  DateTime      @default(now())
+  updated_at  DateTime      @updatedAt
 
   transactions Transaction[]
 
@@ -116,16 +116,16 @@ model Transaction {
 }
 
 model ScheduleProposal {
-  id                String      @id @default(uuid()) @db.Uuid
-  transaction_id    String      @db.Uuid
-  transaction       Transaction @relation(fields: [transaction_id], references: [id])
-  sender_id         String      @db.Uuid
-  sender            User        @relation("SenderProposals", fields: [sender_id], references: [id])
+  id                String         @id @default(uuid()) @db.Uuid
+  transaction_id    String         @db.Uuid
+  transaction       Transaction    @relation(fields: [transaction_id], references: [id])
+  sender_id         String         @db.Uuid
+  sender            User           @relation("SenderProposals", fields: [sender_id], references: [id])
   proposed_datetime DateTime
   proposed_place    String
   status            ProposalStatus @default(pending)
-  created_at        DateTime    @default(now())
-  updated_at        DateTime    @updatedAt
+  created_at        DateTime       @default(now())
+  updated_at        DateTime       @updatedAt
 
   @@map("schedule_proposals")
 }
