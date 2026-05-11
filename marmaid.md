@@ -88,7 +88,7 @@ erDiagram
     
     Users ||--o{ Transactions : "出品者 (seller_id)"
     Users ||--o{ Transactions : "購入者 (buyer_id)"
-    Items ||--o| Transactions : "対象アイテム (item_id)"
+    Items ||--o{ Transactions : "対象アイテム (item_id)"
     
     Transactions ||--o{ Schedule_Proposals : "日程提案 (transaction_id)"
     Users ||--o{ Schedule_Proposals : "提案送信 (sender_id)"
