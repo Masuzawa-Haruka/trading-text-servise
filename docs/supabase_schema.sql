@@ -3,7 +3,9 @@
 -- ==========================================
 CREATE TYPE user_status AS ENUM ('active', 'warning', 'suspended');
 CREATE TYPE item_status AS ENUM ('available', 'matching', 'completed', 'canceled');
+CREATE TYPE item_condition AS ENUM ('new', 'used_good', 'used_bad');
 CREATE TYPE transaction_status AS ENUM ('proposing', 'scheduled', 'completed', 'canceled');
+CREATE TYPE proposal_status AS ENUM ('pending', 'accepted', 'rejected');
 CREATE TYPE evaluation_type AS ENUM ('good', 'bad', 'cancel', 'no_show');
 CREATE TYPE notification_type AS ENUM ('action_required', 'info');
 
@@ -16,6 +18,7 @@ CREATE TABLE users (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email VARCHAR UNIQUE NOT NULL,
     nickname VARCHAR NOT NULL,
+    profile_image_url VARCHAR,
     credit_score INT DEFAULT 100,
     status user_status DEFAULT 'active',
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -27,6 +30,9 @@ CREATE TABLE items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     seller_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR NOT NULL,
+    description TEXT,
+    condition item_condition DEFAULT 'new',
+    category VARCHAR,
     price INT DEFAULT 0,
     image_url VARCHAR,
     status item_status DEFAULT 'available',
@@ -40,6 +46,7 @@ CREATE TABLE transactions (
     item_id UUID NOT NULL REFERENCES items(id) ON DELETE CASCADE,
     seller_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     buyer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    final_price INT,
     status transaction_status DEFAULT 'proposing',
     meeting_datetime TIMESTAMPTZ,
     meeting_place VARCHAR,
@@ -56,7 +63,7 @@ CREATE TABLE schedule_proposals (
     sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     proposed_datetime TIMESTAMPTZ NOT NULL,
     proposed_place VARCHAR NOT NULL,
-    is_accepted BOOLEAN DEFAULT false,
+    status proposal_status DEFAULT 'pending',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
