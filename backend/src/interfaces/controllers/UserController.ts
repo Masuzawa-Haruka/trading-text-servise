@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { GetUsersUseCase } from '../../usecases/GetUsersUseCase';
-import { UserRepository } from '../infrastructure/repositories/UserRepository'; // Note: Dependency injection would be better
+import { UserRepository } from '../../infrastructure/repositories/UserRepository'; // Note: Dependency injection would be better
 
 export class UserController {
   async getUsers(req: Request, res: Response): Promise<void> {
