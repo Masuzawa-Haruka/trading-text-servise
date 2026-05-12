@@ -10,3 +10,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - **Pull Requests**: 原則として「ブランチ作成 → PR作成」のフローを通すこと。PRのターゲット（向き先）は常に `develop` とすること。
 - **Merging**: `develop` の履歴を「1機能（1目的）＝1コミット」の一直線で美しく保つため、マージの際は基本的に Squash and merge（または Rebase and merge）を想定した綺麗な差分・コミット単位を意識すること。
 <!-- END:git-workflow-rules -->
+
+<!-- BEGIN:architecture-rules -->
+# Architecture Policy
+- **Clean Architecture**: バックエンドの実装は「クリーンアーキテクチャ」の原則（Domain, UseCase, Interface/Controller, Infrastructureの分離）に従って行うこと。
+<!-- END:architecture-rules -->
