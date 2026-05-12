@@ -1,9 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import { IUserRepository } from '../../domain/repositories/IUserRepository';
+import { prisma } from '../../lib/prisma';
 import { UserEntity } from '../../domain/user';
 
-const prisma = new PrismaClient();
-
-export class UserRepository {
+export class UserRepository implements IUserRepository {
   async findAll(): Promise<UserEntity[]> {
     const users = await prisma.user.findMany();
     return users.map(user => ({

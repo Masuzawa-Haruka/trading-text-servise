@@ -1,14 +1,12 @@
 import { Request, Response } from 'express';
 import { GetUsersUseCase } from '../../usecases/GetUsersUseCase';
-import { UserRepository } from '../../infrastructure/repositories/UserRepository'; // Note: Dependency injection would be better
 
 export class UserController {
-  async getUsers(req: Request, res: Response): Promise<void> {
+  constructor(private readonly getUsersUseCase: GetUsersUseCase) {}
+
+  getUsers = async (req: Request, res: Response): Promise<void> => {
     try {
-      const userRepository = new UserRepository();
-      const getUsersUseCase = new GetUsersUseCase(userRepository);
-      
-      const users = await getUsersUseCase.execute();
+      const users = await this.getUsersUseCase.execute();
       res.status(200).json(users);
     } catch (error) {
       res.status(500).json({ error: 'Internal Server Error' });
