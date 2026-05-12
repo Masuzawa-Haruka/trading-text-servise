@@ -105,6 +105,7 @@
 | --- | --- | --- | --- |
 | `id` | UUID | PK | 通知ID |
 | `user_id` | UUID | FK (Users) | 通知を受け取るユーザーID |
+| `actor_id` | UUID | FK (Users) / Nullable | 通知を引き起こしたユーザーID（システム通知時はNull） |
 | `title` | String | Not Null | 通知タイトル（例：「日程の提案が届きました」） |
 | `type` | Enum | Not Null | action_required(要対応), info(お知らせ)など |
 | `transaction_id` | UUID | Nullable | タップした時に該当の取引画面へ飛ばすためのID |

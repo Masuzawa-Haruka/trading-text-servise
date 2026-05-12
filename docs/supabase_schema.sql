@@ -94,6 +94,7 @@ CREATE TABLE evaluations (
 CREATE TABLE notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    actor_id UUID REFERENCES users(id) ON DELETE SET NULL,
     title VARCHAR NOT NULL,
     type notification_type NOT NULL,
     transaction_id UUID,
