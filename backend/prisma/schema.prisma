@@ -67,7 +67,8 @@ model User {
   messagesSent      Message[]          @relation("SenderMessages")
   evaluationsTarget Evaluation[]       @relation("TargetEvaluations")
   evaluationsGiven  Evaluation[]       @relation("ReviewerEvaluations")
-  notifications     Notification[]
+  notifications     Notification[]     @relation("ReceiverNotifications")
+  actorNotifications Notification[]    @relation("ActorNotifications")
 
   @@map("users")
 }
@@ -162,7 +163,9 @@ model Evaluation {
 model Notification {
   id             String           @id @default(uuid()) @db.Uuid
   user_id        String           @db.Uuid
-  user           User             @relation(fields: [user_id], references: [id])
+  user           User             @relation("ReceiverNotifications", fields: [user_id], references: [id])
+  actor_id       String?          @db.Uuid
+  actor          User?            @relation("ActorNotifications", fields: [actor_id], references: [id])
   title          String
   type           NotificationType
   transaction_id String?          @db.Uuid

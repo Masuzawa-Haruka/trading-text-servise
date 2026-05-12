@@ -75,6 +75,7 @@ erDiagram
     Notifications {
         UUID id PK
         UUID user_id FK
+        UUID actor_id FK "Nullable"
         String title
         Enum type
         UUID transaction_id FK "Nullable"
@@ -101,5 +102,6 @@ erDiagram
     Users |o--o{ Evaluations : "評価する人 (reviewer_id)"
     
     Users ||--o{ Notifications : "通知受取 (user_id)"
+    Users |o--o{ Notifications : "アクション実行者 (actor_id)"
     Transactions |o--o{ Notifications : "関連する取引 (transaction_id)"
 ```
