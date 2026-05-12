@@ -12,7 +12,7 @@ const userController = new UserController(getUsersUseCase);
 
 // 開発環境以外ではユーザー一覧へのアクセスを制限する（データ保護）
 router.get('/', (req: Request, res: Response, next: NextFunction) => {
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV !== 'development') {
     return res.status(404).json({ message: 'Not found' });
   }
   return userController.getUsers(req, res);

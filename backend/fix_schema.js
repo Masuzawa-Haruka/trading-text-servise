@@ -1,5 +1,8 @@
 const fs = require('fs');
-let schema = fs.readFileSync('prisma/schema.prisma', 'utf-8');
+const path = require('path');
+
+const schemaPath = path.join(__dirname, 'prisma', 'schema.prisma');
+let schema = fs.readFileSync(schemaPath, 'utf-8');
 
 // Add @@schema("public") to all models
 schema = schema.replace(/model\s+\w+\s+\{([^}]+)\}/g, (match, content) => {
@@ -13,4 +16,4 @@ schema = schema.replace(/enum\s+\w+\s+\{([^}]+)\}/g, (match, content) => {
   return match.replace(/}$/, '  @@schema("public")\n}');
 });
 
-fs.writeFileSync('prisma/schema.prisma', schema);
+fs.writeFileSync(schemaPath, schema);
