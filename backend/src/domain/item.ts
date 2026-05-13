@@ -8,8 +8,15 @@
 /** 出品のステータス。仕様書 5.1 の状態定義に対応する */
 export type ItemStatus = 'available' | 'matching' | 'completed' | 'canceled';
 
+/** コントローラーでのバリデーション（ホワイトリスト検証）に使う */
+export const VALID_ITEM_STATUSES: ItemStatus[] = ['available', 'matching', 'completed', 'canceled'];
+
 /** 参考書の状態（コンディション）*/
 export type ItemCondition = 'new' | 'used_good' | 'used_bad';
+
+/** コントローラーでのバリデーション（ホワイトリスト検証）に使う */
+export const VALID_ITEM_CONDITIONS: ItemCondition[] = ['new', 'used_good', 'used_bad'];
+
 
 /**
  * 出品エンティティ（DBのitemsテーブル1行に対応するデータ構造）

@@ -8,6 +8,7 @@
 import { prisma } from '../../lib/prisma';
 import { IItemRepository } from '../../domain/repositories/IItemRepository';
 import { ItemEntity, CreateItemInput, GetItemsFilter, ItemStatus, ItemCondition } from '../../domain/item';
+import { Item } from '@prisma/client';
 
 export class ItemRepository implements IItemRepository {
   /**
@@ -43,7 +44,7 @@ export class ItemRepository implements IItemRepository {
       },
       orderBy: { created_at: 'desc' },
     });
-    return items.map(this.toEntity);
+    return items.map((item) => this.toEntity(item));
   }
 
   /**
@@ -71,8 +72,9 @@ export class ItemRepository implements IItemRepository {
   /**
    * Prismaが返すオブジェクトを、ドメイン層の ItemEntity 型に変換するプライベートメソッド。
    * Prismaの Enum 型は .toString() で文字列に変換する必要がある。
+   * 引数に Prisma 生成の Item 型を使うことで、フィールド変更をコンパイル時に検知できる。
    */
-  private toEntity(item: any): ItemEntity {
+  private toEntity(item: Item): ItemEntity {
     return {
       ...item,
       condition: item.condition.toString() as ItemCondition,
