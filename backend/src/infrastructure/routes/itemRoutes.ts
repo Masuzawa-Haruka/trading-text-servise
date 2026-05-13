@@ -1,3 +1,13 @@
+/**
+ * itemRoutes（出品ルーティングと依存性の注入）
+ *
+ * このファイルは2つの役割を持つ：
+ * 1. Composition Root（組み立て場所）:
+ *    Repository → UseCase → Controller の順にインスタンスを生成し、依存関係を繋ぎ合わせる。
+ * 2. ルーティング設定:
+ *    各URLパスとHTTPメソッドに対して、対応するコントローラーのメソッドをひも付ける。
+ *    認証が必要なエンドポイントには authenticateToken ミドルウェアを挟む。
+ */
 import { Router } from 'express';
 import { ItemController } from '../../interfaces/controllers/ItemController';
 import { ItemRepository } from '../repositories/ItemRepository';
@@ -9,7 +19,8 @@ import { authenticateToken } from '../../middleware/auth';
 
 const router = Router();
 
-// 依存関係の注入 (Dependency Injection / Composition Root)
+// --- 依存関係の注入 (Dependency Injection / Composition Root) ---
+// 1つの ItemRepository インスタンスを全 UseCase で共有する
 const itemRepository = new ItemRepository();
 const itemController = new ItemController(
   new CreateItemUseCase(itemRepository),
@@ -18,16 +29,18 @@ const itemController = new ItemController(
   new UpdateItemStatusUseCase(itemRepository),
 );
 
-// GET /api/items  - 出品一覧（認証不要・公開）
+// --- ルーティング定義 ---
+
+// 出品一覧取得（認証不要・公開）
 router.get('/', itemController.getItems);
 
-// GET /api/items/:id  - 出品詳細（認証不要・公開）
+// 出品詳細取得（認証不要・公開）
 router.get('/:id', itemController.getItemById);
 
-// POST /api/items  - 出品作成（認証必須）
+// 出品作成（認証必須）: authenticateToken が先に実行され req.user をセットする
 router.post('/', authenticateToken, itemController.createItem);
 
-// PATCH /api/items/:id/status  - ステータス変更（認証必須・本人のみ）
+// ステータス変更（認証必須・本人のみ）: UseCase 内でさらに seller_id チェックを行う
 router.patch('/:id/status', authenticateToken, itemController.updateStatus);
 
 export default router;
