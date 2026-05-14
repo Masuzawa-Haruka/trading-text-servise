@@ -42,6 +42,12 @@ export class CreateTransactionUseCase {
       throw new ForbiddenError('自分の出品には申し込めません');
     }
 
+    // 同じ出品への重複申し込みを防ぐ（キャンセル済みは除外し再申し込みを許可）
+    const existing = await this.transactionRepository.findByItemAndBuyer(itemId, buyerId);
+    if (existing) {
+      throw new ForbiddenError('この出品にはすでに申し込み済みです');
+    }
+
     return await this.transactionRepository.create({
       item_id: itemId,
       seller_id: item.seller_id,

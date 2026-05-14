@@ -68,6 +68,24 @@ export class TransactionRepository implements ITransactionRepository {
   }
 
   /**
+   * 同じ item_id と buyer_id の組み合わせを持つ既存取引を検索する。
+   * キャンセル済みを除く取引が存在すれば重複と判断する。
+   * CreateTransactionUseCase で重複申し込みを防ぐために使う。
+   */
+  async findByItemAndBuyer(itemId: string, buyerId: string): Promise<TransactionEntity | null> {
+    const transaction = await prisma.transaction.findFirst({
+      where: {
+        item_id: itemId,
+        buyer_id: buyerId,
+        // キャンセル済みは重複チェックの対象外とし、再申し込みを許可する
+        status: { not: 'canceled' },
+      },
+    });
+    if (!transaction) return null;
+    return this.toEntity(transaction);
+  }
+
+  /**
    * 取引情報を更新する。
    * undefined のフィールドは更新対象から除外される（部分更新）。
    * meeting_datetime は ISO8601 文字列を Date 型に変換してから保存する。

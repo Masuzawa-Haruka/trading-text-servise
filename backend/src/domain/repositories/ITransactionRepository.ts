@@ -24,6 +24,9 @@ export interface ITransactionRepository {
   /** 指定したIDの取引1件を取得する。存在しない場合は null を返す */
   findById(id: string): Promise<TransactionEntity | null>;
 
+  /** 同じ出品への同じユーザーの重複申し込みを検出するために使う */
+  findByItemAndBuyer(itemId: string, buyerId: string): Promise<TransactionEntity | null>;
+
   /** 取引情報（ステータス・価格・受け渡し情報）を更新する */
   update(id: string, input: UpdateTransactionInput): Promise<TransactionEntity>;
 }

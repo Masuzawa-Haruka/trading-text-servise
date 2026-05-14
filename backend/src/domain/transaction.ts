@@ -18,6 +18,25 @@ export const VALID_TRANSACTION_STATUSES: TransactionStatus[] = [
 ];
 
 /**
+ * ステータス遷移のステートマシン定義。
+ * キーが「現在のステータス」、値が「遷移可能なステータスの配列」。
+ * UseCase 層でこの定義を参照し、不正な遷移（例: completed → proposing）を拒否する。
+ *
+ * 許可されるフロー：
+ * proposing → scheduled（出品者が承認）
+ * proposing → canceled（双方がキャンセル）
+ * scheduled → completed（受け渡し完了）
+ * scheduled → canceled（双方がキャンセル）
+ * completed, canceled は終端状態のため遷移不可
+ */
+export const VALID_TRANSITIONS: Record<TransactionStatus, TransactionStatus[]> = {
+  proposing: ['scheduled', 'canceled'],
+  scheduled: ['completed', 'canceled'],
+  completed: [],
+  canceled: [],
+};
+
+/**
  * 取引エンティティ（DBの transactions テーブル 1 行に対応）
  * リポジトリ・ユースケース・コントローラー間のデータ受け渡しに使う。
  */
