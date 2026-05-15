@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import userRoutes from './infrastructure/routes/userRoutes';
 import itemRoutes from './infrastructure/routes/itemRoutes';
+import transactionRoutes from './infrastructure/routes/transactionRoutes';
 dotenv.config();
 
 const app = express();
@@ -16,6 +17,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/items', itemRoutes);
+app.use('/api/transactions', transactionRoutes);
 app.use('/api/users', userRoutes);
 
 app.listen(port, () => {

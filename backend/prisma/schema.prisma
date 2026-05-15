@@ -38,6 +38,12 @@ enum ProposalStatus {
   rejected
 }
 
+enum OfferStatus {
+  pending
+  accepted
+  rejected
+}
+
 enum EvaluationType {
   good
   bad
@@ -64,6 +70,7 @@ model User {
   sales             Transaction[]      @relation("SellerTransactions")
   purchases         Transaction[]      @relation("BuyerTransactions")
   proposalsSent     ScheduleProposal[] @relation("SenderProposals")
+  offersSent        PriceOffer[]       @relation("SenderOffers")
   messagesSent      Message[]          @relation("SenderMessages")
   evaluationsTarget Evaluation[]       @relation("TargetEvaluations")
   evaluationsGiven  Evaluation[]       @relation("ReviewerEvaluations")
@@ -110,6 +117,7 @@ model Transaction {
   updated_at       DateTime          @updatedAt
 
   proposals   ScheduleProposal[]
+  priceOffers PriceOffer[]
   messages    Message[]
   evaluations Evaluation[]
 
@@ -129,6 +137,22 @@ model ScheduleProposal {
   updated_at        DateTime       @updatedAt
 
   @@map("schedule_proposals")
+}
+
+/// 価格交渉オファーモデル（Take it or Leave it 方式 ・ 最大3回）
+model PriceOffer {
+  id             String      @id @default(uuid()) @db.Uuid
+  transaction_id String      @db.Uuid
+  transaction    Transaction @relation(fields: [transaction_id], references: [id])
+  sender_id      String      @db.Uuid
+  sender         User        @relation("SenderOffers", fields: [sender_id], references: [id])
+  price          Int
+  status         OfferStatus @default(pending)
+  offer_count    Int         // 1　3の整数。3回目は受信側に2択のみ表示
+  created_at     DateTime    @default(now())
+  updated_at     DateTime    @updatedAt
+
+  @@map("price_offers")
 }
 
 model Message {
