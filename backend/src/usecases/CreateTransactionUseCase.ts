@@ -6,6 +6,10 @@
  * - 対象の出品が存在するか
  * - 出品ステータスが 'available'（受付中）か
  * - 出品者本人が自分の出品に申し込もうとしていないか
+ *
+ * 重複チェック + 取引作成 + 出品ステータス更新（→ matching）は
+ * リポジトリの createAtomically で1つのDBトランザクション内で行い、
+ * 同時リクエストによるデータ不整合を防ぐ。
  */
 import { ITransactionRepository } from '../domain/repositories/ITransactionRepository';
 import { IItemRepository } from '../domain/repositories/IItemRepository';
@@ -23,7 +27,7 @@ export class CreateTransactionUseCase {
    * @param itemId - 申し込む出品のID
    * @param buyerId - 申し込む認証ユーザーのID
    * @throws {NotFoundError} 指定した出品が存在しない場合
-   * @throws {ForbiddenError} 出品が受付中でない、または出品者本人が申し込もうとした場合
+   * @throws {ForbiddenError} 出品が受付中でない、出品者本人が申し込もうとした、重複申し込みの場合
    */
   async execute(itemId: string, buyerId: string): Promise<TransactionEntity> {
     // 出品の存在確認
@@ -42,13 +46,9 @@ export class CreateTransactionUseCase {
       throw new ForbiddenError('自分の出品には申し込めません');
     }
 
-    // 同じ出品への重複申し込みを防ぐ（キャンセル済みは除外し再申し込みを許可）
-    const existing = await this.transactionRepository.findByItemAndBuyer(itemId, buyerId);
-    if (existing) {
-      throw new ForbiddenError('この出品にはすでに申し込み済みです');
-    }
-
-    return await this.transactionRepository.create({
+    // 原子的に「重複チェック + 取引作成 + 出品ステータス → matching」を行う
+    // DBトランザクション内で処理するため、同時リクエストによる重複作成を防ぐ
+    return await this.transactionRepository.createAtomically({
       item_id: itemId,
       seller_id: item.seller_id,
       buyer_id: buyerId,

@@ -4,6 +4,9 @@
  * ITransactionRepository インターフェースを実装し、Prisma Client を通じて
  * Supabase（PostgreSQL）の transactions テーブルへの実際のCRUD操作を担う。
  * この層だけがDBの具体的な実装（Prisma）に依存する。
+ *
+ * 原子的操作（createAtomically, updateWithItemSync）では Prisma の
+ * $transaction を使い、複数テーブルの更新をDBトランザクション内で行う。
  */
 import { Transaction } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
@@ -14,6 +17,8 @@ import {
   CreateTransactionInput,
   UpdateTransactionInput,
 } from '../../domain/transaction';
+import { ItemStatus } from '../../domain/item';
+import { ForbiddenError } from '../../domain/errors';
 
 export class TransactionRepository implements ITransactionRepository {
   /**
@@ -29,6 +34,49 @@ export class TransactionRepository implements ITransactionRepository {
       },
     });
     return this.toEntity(transaction);
+  }
+
+  /**
+   * 取引作成 + 重複チェック + 出品ステータス更新を原子的に行う。
+   * Prisma.$transaction を使い、以下を1つのDBトランザクション内で実行する：
+   * 1. 同一 item_id + buyer_id の未キャンセル取引がないか確認（重複防止）
+   * 2. 取引レコードを作成
+   * 3. 出品ステータスを 'matching' に更新
+   * 同時リクエストが来ても、DBのトランザクション分離レベルにより一方だけが成功する。
+   */
+  async createAtomically(input: CreateTransactionInput): Promise<TransactionEntity> {
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. 重複チェック（DB トランザクション内で行うことで同時リクエストを防ぐ）
+      const existing = await tx.transaction.findFirst({
+        where: {
+          item_id: input.item_id,
+          buyer_id: input.buyer_id,
+          status: { not: 'canceled' },
+        },
+      });
+      if (existing) {
+        throw new ForbiddenError('この出品にはすでに申し込み済みです');
+      }
+
+      // 2. 取引レコードを作成
+      const transaction = await tx.transaction.create({
+        data: {
+          item_id: input.item_id,
+          seller_id: input.seller_id,
+          buyer_id: input.buyer_id,
+        },
+      });
+
+      // 3. 出品ステータスを 'matching' に更新（他の購入者からの申し込みを遮断）
+      await tx.item.update({
+        where: { id: input.item_id },
+        data: { status: 'matching' },
+      });
+
+      return transaction;
+    });
+
+    return this.toEntity(result);
   }
 
   /**
@@ -77,7 +125,6 @@ export class TransactionRepository implements ITransactionRepository {
       where: {
         item_id: itemId,
         buyer_id: buyerId,
-        // キャンセル済みは重複チェックの対象外とし、再申し込みを許可する
         status: { not: 'canceled' },
       },
     });
@@ -93,16 +140,52 @@ export class TransactionRepository implements ITransactionRepository {
   async update(id: string, input: UpdateTransactionInput): Promise<TransactionEntity> {
     const transaction = await prisma.transaction.update({
       where: { id },
-      data: {
-        ...(input.status !== undefined && { status: input.status }),
-        ...(input.final_price !== undefined && { final_price: input.final_price }),
-        ...(input.meeting_datetime !== undefined && {
-          meeting_datetime: new Date(input.meeting_datetime),
-        }),
-        ...(input.meeting_place !== undefined && { meeting_place: input.meeting_place }),
-      },
+      data: this.buildUpdateData(input),
     });
     return this.toEntity(transaction);
+  }
+
+  /**
+   * 取引ステータス更新 + 出品ステータス更新を原子的に行う。
+   * Prisma.$transaction で以下を1つのDBトランザクション内で実行する：
+   * 1. 取引を更新（ステータス・受け渡し情報など）
+   * 2. 出品ステータスを同期（completed → completed、canceled → available）
+   */
+  async updateWithItemSync(
+    id: string,
+    input: UpdateTransactionInput,
+    itemUpdate: { itemId: string; status: ItemStatus },
+  ): Promise<TransactionEntity> {
+    const result = await prisma.$transaction(async (tx) => {
+      const transaction = await tx.transaction.update({
+        where: { id },
+        data: this.buildUpdateData(input),
+      });
+
+      await tx.item.update({
+        where: { id: itemUpdate.itemId },
+        data: { status: itemUpdate.status },
+      });
+
+      return transaction;
+    });
+
+    return this.toEntity(result);
+  }
+
+  /**
+   * UpdateTransactionInput から Prisma の update data オブジェクトを構築するヘルパー。
+   * update と updateWithItemSync で共通して使い、ロジックの重複を防ぐ。
+   */
+  private buildUpdateData(input: UpdateTransactionInput) {
+    return {
+      ...(input.status !== undefined && { status: input.status }),
+      ...(input.final_price !== undefined && { final_price: input.final_price }),
+      ...(input.meeting_datetime !== undefined && {
+        meeting_datetime: new Date(input.meeting_datetime),
+      }),
+      ...(input.meeting_place !== undefined && { meeting_place: input.meeting_place }),
+    };
   }
 
   /**

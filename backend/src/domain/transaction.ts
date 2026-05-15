@@ -37,6 +37,22 @@ export const VALID_TRANSITIONS: Record<TransactionStatus, TransactionStatus[]> =
 };
 
 /**
+ * ステータス遷移ごとに、実行可能な当事者ロールを定義する。
+ * 'seller' = 出品者のみ、'buyer' = 買い手のみ、'both' = どちらも可。
+ *
+ * proposing → scheduled は「出品者が承認」する操作なので seller のみ。
+ * キャンセルと完了は双方が実行できる。
+ */
+export type TransactionRole = 'seller' | 'buyer' | 'both';
+
+export const TRANSITION_ALLOWED_ROLES: Record<string, TransactionRole> = {
+  'proposing->scheduled': 'seller',   // 出品者が申し込みを承認
+  'proposing->canceled': 'both',      // 双方がキャンセル可能
+  'scheduled->completed': 'both',     // 双方が受け渡し完了を確認
+  'scheduled->canceled': 'both',      // 双方がキャンセル可能
+};
+
+/**
  * 取引エンティティ（DBの transactions テーブル 1 行に対応）
  * リポジトリ・ユースケース・コントローラー間のデータ受け渡しに使う。
  */

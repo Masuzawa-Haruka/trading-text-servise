@@ -56,7 +56,7 @@ export class TransactionController {
         return;
       }
 
-      // req.body がオブジェクトでなければ分割代入前に弾く（JSON null や配列の TypeEror 防止）
+      // req.body がオブジェクトでなければ分割代入前に弾く（JSON null や配列の TypeError 防止）
       if (typeof req.body !== 'object' || req.body === null || Array.isArray(req.body)) {
         res.status(400).json({ error: 'リクエストボディはオブジェクトで指定してください' });
         return;
@@ -105,7 +105,7 @@ export class TransactionController {
         return;
       }
 
-      // req.body がオブジェクトでなければ分割代入前に弾く（JSON null や配列の TypeEror 防止）
+      // req.body がオブジェクトでなければ分割代入前に弾く（JSON null や配列の TypeError 防止）
       if (typeof req.body !== 'object' || req.body === null || Array.isArray(req.body)) {
         res.status(400).json({ error: 'リクエストボディはオブジェクトで指定してください' });
         return;
