@@ -43,6 +43,11 @@ export class ScheduleProposalController {
         return;
       }
 
+      if (typeof req.body !== 'object' || req.body === null || Array.isArray(req.body)) {
+        res.status(400).json({ error: 'リクエストボディはオブジェクトで指定してください' });
+        return;
+      }
+
       const { transaction_id, candidates } = req.body;
 
       if (!isValidUuid(transaction_id)) {
@@ -89,6 +94,11 @@ export class ScheduleProposalController {
       const proposalId = req.params.id;
       if (!isValidUuid(proposalId)) {
         res.status(400).json({ error: '無効な提案ID形式です' });
+        return;
+      }
+
+      if (typeof req.body !== 'object' || req.body === null || Array.isArray(req.body)) {
+        res.status(400).json({ error: 'リクエストボディはオブジェクトで指定してください' });
         return;
       }
 

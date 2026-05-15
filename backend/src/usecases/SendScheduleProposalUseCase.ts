@@ -38,11 +38,8 @@ export class SendScheduleProposalUseCase {
       throw new ForbiddenError('日程調整ができる状態ではありません');
     }
 
-    // 既存の pending 候補を却下 (リセット)
-    await this.scheduleProposalRepository.rejectAllPendingByTransactionId(input.transaction_id);
-
-    // 新しい候補を作成
-    await this.scheduleProposalRepository.createMany(
+    // 既存の pending 候補を却下し、新しい候補を作成する処理を原子的に実行
+    await this.scheduleProposalRepository.replaceProposalsAtomically(
       input.transaction_id,
       input.sender_id,
       input.candidates

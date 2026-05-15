@@ -45,6 +45,10 @@ export class RespondScheduleProposalUseCase {
       throw new ForbiddenError('この取引の回答を行う権限がありません');
     }
 
+    if (transaction.status !== 'proposing') {
+      throw new ForbiddenError('この取引は現在日程調整できる状態ではありません');
+    }
+
     if (input.status === 'accepted') {
       try {
         return await this.scheduleProposalRepository.acceptProposalAtomically(
@@ -57,13 +61,26 @@ export class RespondScheduleProposalUseCase {
         if (error.message === 'ALREADY_RESPONDED') {
           throw new ValidationError('この候補は既に他の操作によって回答済みです');
         }
+        if (error.message === 'INVALID_TRANSITION') {
+          throw new ValidationError('取引のステータスが不正なため、日程を確定できませんでした');
+        }
         throw error;
       }
     } else {
       // rejected の場合。
       // 今回の仕様では「セット」としての却下とするため、本来は一括却下が望ましいが、
       // 単一候補の却下としても実装は可能。
-      return await this.scheduleProposalRepository.updateStatus(proposalId, 'rejected');
+      try {
+        return await this.scheduleProposalRepository.rejectProposalAtomically(proposalId);
+      } catch (error: any) {
+        if (error.message === 'ALREADY_RESPONDED') {
+          throw new ValidationError('この候補は既に他の操作によって回答済みです');
+        }
+        if (error.message === 'NOT_FOUND') {
+          throw new NotFoundError('指定された候補が見つかりません');
+        }
+        throw error;
+      }
     }
   }
 }

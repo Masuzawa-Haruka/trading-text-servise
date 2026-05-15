@@ -8,23 +8,36 @@ import { ScheduleProposal } from '@prisma/client';
 
 export class ScheduleProposalRepository implements IScheduleProposalRepository {
   /**
-   * 複数の候補を一括作成する。
-   * トランザクションは呼び出し側（UseCase）が意識しなくても良いよう、内部で完結させることもできるが、
-   * 今回はシンプルに `createMany` を使用。
+   * 既存の pending 候補を却下し、新しい候補を一括作成する。
+   * これにより、「提案セット」の差し替えが原子的に行われる。
    */
-  async createMany(
+  async replaceProposalsAtomically(
     transactionId: string,
     senderId: string,
     candidates: ScheduleCandidateInput[]
   ): Promise<void> {
-    await prisma.scheduleProposal.createMany({
-      data: candidates.map(c => ({
-        transaction_id: transactionId,
-        sender_id: senderId,
-        proposed_datetime: new Date(c.proposed_datetime),
-        proposed_place: c.proposed_place,
-        status: 'pending',
-      })),
+    await prisma.$transaction(async (tx) => {
+      // 既存のpending候補を無効化
+      await tx.scheduleProposal.updateMany({
+        where: {
+          transaction_id: transactionId,
+          status: 'pending',
+        },
+        data: {
+          status: 'rejected',
+        },
+      });
+
+      // 新規作成
+      await tx.scheduleProposal.createMany({
+        data: candidates.map(c => ({
+          transaction_id: transactionId,
+          sender_id: senderId,
+          proposed_datetime: new Date(c.proposed_datetime),
+          proposed_place: c.proposed_place,
+          status: 'pending',
+        })),
+      });
     });
   }
 
@@ -43,16 +56,23 @@ export class ScheduleProposalRepository implements IScheduleProposalRepository {
     return proposals.map(p => this.toEntity(p));
   }
 
-  async rejectAllPendingByTransactionId(transactionId: string): Promise<void> {
-    await prisma.scheduleProposal.updateMany({
-      where: {
-        transaction_id: transactionId,
-        status: 'pending',
-      },
-      data: {
-        status: 'rejected',
-      },
+  async rejectProposalAtomically(id: string): Promise<ScheduleProposalEntity> {
+    const result = await prisma.$transaction(async (tx) => {
+      const updateResult = await tx.scheduleProposal.updateMany({
+        where: { id, status: 'pending' },
+        data: { status: 'rejected' },
+      });
+
+      if (updateResult.count === 0) {
+        throw new Error('ALREADY_RESPONDED');
+      }
+
+      const updated = await tx.scheduleProposal.findUnique({ where: { id } });
+      if (!updated) throw new Error('NOT_FOUND');
+      return updated;
     });
+
+    return this.toEntity(result);
   }
 
   async acceptProposalAtomically(
@@ -84,8 +104,8 @@ export class ScheduleProposalRepository implements IScheduleProposalRepository {
       });
 
       // 3. 取引情報を更新（status -> scheduled, 日時・場所の反映）
-      await tx.transaction.update({
-        where: { id: transactionId },
+      const txUpdateResult = await tx.transaction.updateMany({
+        where: { id: transactionId, status: 'proposing' },
         data: {
           status: 'scheduled',
           meeting_datetime: acceptedDatetime,
@@ -93,19 +113,15 @@ export class ScheduleProposalRepository implements IScheduleProposalRepository {
         },
       });
 
+      if (txUpdateResult.count === 0) {
+        throw new Error('INVALID_TRANSITION');
+      }
+
       const updated = await tx.scheduleProposal.findUniqueOrThrow({
         where: { id: proposalId },
       });
       return this.toEntity(updated);
     });
-  }
-
-  async updateStatus(id: string, status: ProposalStatus): Promise<ScheduleProposalEntity> {
-    const proposal = await prisma.scheduleProposal.update({
-      where: { id },
-      data: { status },
-    });
-    return this.toEntity(proposal);
   }
 
   private toEntity(p: ScheduleProposal): ScheduleProposalEntity {

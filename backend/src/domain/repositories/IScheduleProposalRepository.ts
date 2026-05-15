@@ -5,9 +5,9 @@ import { ScheduleProposalEntity, ScheduleCandidateInput, ProposalStatus } from '
 
 export interface IScheduleProposalRepository {
   /**
-   * 複数の候補を一括作成する
+   * 既存の保留中候補を一括却下し、新しい候補を一括作成する（原子的操作）
    */
-  createMany(
+  replaceProposalsAtomically(
     transactionId: string,
     senderId: string,
     candidates: ScheduleCandidateInput[]
@@ -24,9 +24,9 @@ export interface IScheduleProposalRepository {
   findByTransactionId(transactionId: string): Promise<ScheduleProposalEntity[]>;
 
   /**
-   * 取引に紐づく保留中の候補をすべて却下する
+   * 単一候補のステータスをrejectedに更新する（原子的操作）
    */
-  rejectAllPendingByTransactionId(transactionId: string): Promise<void>;
+  rejectProposalAtomically(id: string): Promise<ScheduleProposalEntity>;
 
   /**
    * 提案の承認と取引情報の更新を原子的に行う
@@ -38,8 +38,5 @@ export interface IScheduleProposalRepository {
     acceptedPlace: string
   ): Promise<ScheduleProposalEntity>;
 
-  /**
-   * 単一候補のステータスを更新する
-   */
-  updateStatus(id: string, status: ProposalStatus): Promise<ScheduleProposalEntity>;
+
 }
