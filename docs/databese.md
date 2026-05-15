@@ -69,6 +69,21 @@
 | `created_at` | DateTime |  | 提案の送信日時 |
 | `updated_at` | DateTime |  | 承認状態等の更新日時 |
 
+### 4. Price_Offers（価格交渉オファーテーブル）
+
+Take it or Leave it 方式の価格交渉を管理します。1取引あたり最大3回まで価格提案が可能です。
+
+| カラム名 | 型 | 制約 / デフォルト | 説明 |
+| --- | --- | --- | --- |
+| `id` | UUID | PK | オファーID |
+| `transaction_id` | UUID | FK (Transactions) | 紐づく取引ID |
+| `sender_id` | UUID | FK (Users) | オファーを送信したユーザーID |
+| `price` | Int | Not Null | 提案価格（0円可） |
+| `status` | Enum | Default: 'pending' | pending(未回答), accepted(承認), rejected(辞退) |
+| `offer_count` | Int | Not Null | 何回目のオファーか（1〜3）。3回目は受信側に承認/辞退の2択のみ表示 |
+| `created_at` | DateTime |  | オファー送信日時 |
+| `updated_at` | DateTime |  | ステータス更新日時 |
+
 ### 5. Messages（取引連絡ボードテーブル）
 
 日時が確定した（`Transactions.status == 'scheduled'`）後のみ、書き込み・表示を許可するテーブルです。

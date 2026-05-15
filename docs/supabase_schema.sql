@@ -6,6 +6,7 @@ CREATE TYPE item_status AS ENUM ('available', 'matching', 'completed', 'canceled
 CREATE TYPE item_condition AS ENUM ('new', 'used_good', 'used_bad');
 CREATE TYPE transaction_status AS ENUM ('proposing', 'scheduled', 'completed', 'canceled');
 CREATE TYPE proposal_status AS ENUM ('pending', 'accepted', 'rejected');
+CREATE TYPE offer_status AS ENUM ('pending', 'accepted', 'rejected');
 CREATE TYPE evaluation_type AS ENUM ('good', 'bad', 'cancel', 'no_show');
 CREATE TYPE notification_type AS ENUM ('action_required', 'info');
 
@@ -68,7 +69,19 @@ CREATE TABLE schedule_proposals (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 5. Messages
+-- 5. Price Offers（価格交渉: Take it or Leave it 方式 / 最大3回）
+CREATE TABLE price_offers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    transaction_id UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    price INT NOT NULL CHECK (price >= 0),
+    status offer_status DEFAULT 'pending',
+    offer_count INT NOT NULL CHECK (offer_count BETWEEN 1 AND 3),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6. Messages
 CREATE TABLE messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     transaction_id UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
@@ -78,7 +91,7 @@ CREATE TABLE messages (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 6. Evaluations
+-- 7. Evaluations
 CREATE TABLE evaluations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     transaction_id UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
@@ -90,7 +103,7 @@ CREATE TABLE evaluations (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 7. Notifications
+-- 8. Notifications
 CREATE TABLE notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -112,6 +125,7 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE schedule_proposals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE price_offers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evaluations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
@@ -170,7 +184,39 @@ USING (
 );
 
 -- ------------------------------------------
--- 5. Messages
+-- 5. Price Offers
+-- 取引の当事者のみ閲覧可能
+CREATE POLICY "Parties can view price offers" ON price_offers FOR SELECT
+USING (
+    EXISTS (
+        SELECT 1 FROM transactions t
+        WHERE t.id = price_offers.transaction_id
+        AND (t.seller_id = auth.uid() OR t.buyer_id = auth.uid())
+    )
+);
+-- 取引の当事者のみオファーを送信可能
+CREATE POLICY "Parties can insert price offers" ON price_offers FOR INSERT
+WITH CHECK (
+    auth.uid() = sender_id
+    AND EXISTS (
+        SELECT 1 FROM transactions t
+        WHERE t.id = price_offers.transaction_id
+        AND (t.seller_id = auth.uid() OR t.buyer_id = auth.uid())
+    )
+);
+-- オファーの受信側（送信者でない当事者）のみ承認/辞退できる
+CREATE POLICY "Receiver can update price offers" ON price_offers FOR UPDATE
+USING (
+    auth.uid() != sender_id
+    AND EXISTS (
+        SELECT 1 FROM transactions t
+        WHERE t.id = price_offers.transaction_id
+        AND (t.seller_id = auth.uid() OR t.buyer_id = auth.uid())
+    )
+);
+
+-- ------------------------------------------
+-- 6. Messages
 -- 取引の当事者のみメッセージを閲覧可能
 CREATE POLICY "Parties can view messages" ON messages FOR SELECT 
 USING (
@@ -186,7 +232,7 @@ WITH CHECK (auth.uid() = sender_id);
 -- ※ メッセージの更新・削除は不可とするためポリシーなし
 
 -- ------------------------------------------
--- 6. Evaluations
+-- 7. Evaluations
 -- 評価された対象者、または評価者は閲覧可能
 CREATE POLICY "Target and reviewer can view evaluations" ON evaluations FOR SELECT 
 USING (auth.uid() = target_user_id OR auth.uid() = reviewer_id);
@@ -195,7 +241,7 @@ CREATE POLICY "Reviewers can insert evaluations" ON evaluations FOR INSERT
 WITH CHECK (auth.uid() = reviewer_id);
 
 -- ------------------------------------------
--- 7. Notifications
+-- 8. Notifications
 -- 自分の通知のみ閲覧可能
 CREATE POLICY "Users can view own notifications" ON notifications FOR SELECT 
 USING (auth.uid() = user_id);
@@ -218,6 +264,7 @@ CREATE TRIGGER update_users_modtime BEFORE UPDATE ON users FOR EACH ROW EXECUTE 
 CREATE TRIGGER update_items_modtime BEFORE UPDATE ON items FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_transactions_modtime BEFORE UPDATE ON transactions FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_schedule_proposals_modtime BEFORE UPDATE ON schedule_proposals FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+CREATE TRIGGER update_price_offers_modtime BEFORE UPDATE ON price_offers FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_evaluations_modtime BEFORE UPDATE ON evaluations FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_notifications_modtime BEFORE UPDATE ON notifications FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 
