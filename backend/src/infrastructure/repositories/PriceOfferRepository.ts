@@ -139,7 +139,7 @@ export class PriceOfferRepository implements IPriceOfferRepository {
     const result = await prisma.$transaction(async (tx) => {
       // 1. オファーのステータスを accepted に更新（pendingの場合のみ）
       const updateResult = await tx.priceOffer.updateMany({
-        where: { id: offerId, status: 'pending' },
+        where: { id: offerId, transaction_id: transactionId, status: 'pending' },
         data: { status },
       });
 
