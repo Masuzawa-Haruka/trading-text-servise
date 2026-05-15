@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import userRoutes from './infrastructure/routes/userRoutes';
 import itemRoutes from './infrastructure/routes/itemRoutes';
 import transactionRoutes from './infrastructure/routes/transactionRoutes';
+import priceOfferRoutes from './infrastructure/routes/priceOfferRoutes';
 dotenv.config();
 
 const app = express();
@@ -19,6 +20,7 @@ app.get('/', (req, res) => {
 app.use('/api/items', itemRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/price-offers', priceOfferRoutes);
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);

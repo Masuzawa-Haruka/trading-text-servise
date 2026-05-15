@@ -21,3 +21,11 @@ export class ForbiddenError extends Error {
     this.name = 'ForbiddenError';
   }
 }
+
+/** リクエストの内容が不正な場合（HTTP 400 に対応） */
+export class ValidationError extends Error {
+  constructor(message = '不正なリクエストです') {
+    super(message);
+    this.name = 'ValidationError';
+  }
+}
