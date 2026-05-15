@@ -4,6 +4,7 @@ import { PriceOfferRepository } from '../repositories/PriceOfferRepository';
 import { TransactionRepository } from '../repositories/TransactionRepository';
 import { SendPriceOfferUseCase } from '../../usecases/SendPriceOfferUseCase';
 import { RespondPriceOfferUseCase } from '../../usecases/RespondPriceOfferUseCase';
+import { GetPriceOffersUseCase } from '../../usecases/GetPriceOffersUseCase';
 import { authenticateToken } from '../../middleware/auth';
 
 const router = Router();
@@ -21,18 +22,22 @@ const respondPriceOfferUseCase = new RespondPriceOfferUseCase(
   transactionRepository,
 );
 
+const getPriceOffersUseCase = new GetPriceOffersUseCase(
+  priceOfferRepository,
+  transactionRepository,
+);
+
 const priceOfferController = new PriceOfferController(
   sendPriceOfferUseCase,
   respondPriceOfferUseCase,
-  priceOfferRepository,
+  getPriceOffersUseCase,
 );
 
 // すべてのルートに認証ミドルウェアを適用
 router.use(authenticateToken);
 
 // オファー一覧取得
-// .bind(priceOfferController) を使用して、this が失われないようにする
-router.get('/:transactionId', priceOfferController.getOffersByTransaction.bind(priceOfferController));
+router.get('/by-transaction/:transactionId', priceOfferController.getOffersByTransaction.bind(priceOfferController));
 
 // オファー送信
 router.post('/', priceOfferController.sendOffer.bind(priceOfferController));

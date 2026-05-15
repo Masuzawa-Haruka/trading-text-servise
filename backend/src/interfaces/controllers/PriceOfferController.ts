@@ -4,9 +4,11 @@
  * クライアントからの価格交渉（PriceOffer）に関するHTTPリクエストを受け付け、
  * バリデーションを行った後、UseCase層に処理を委譲する。
  */
-import { Request, Response } from 'express';
+import { Response } from 'express';
+import { AuthRequest } from '../../middleware/auth';
 import { SendPriceOfferUseCase } from '../../usecases/SendPriceOfferUseCase';
 import { RespondPriceOfferUseCase } from '../../usecases/RespondPriceOfferUseCase';
+import { GetPriceOffersUseCase } from '../../usecases/GetPriceOffersUseCase';
 import { IPriceOfferRepository } from '../../domain/repositories/IPriceOfferRepository';
 import { NotFoundError, ForbiddenError, ValidationError } from '../../domain/errors';
 import { isValidUuid, INT32_MAX } from '../../lib/validation';
@@ -15,14 +17,14 @@ export class PriceOfferController {
   constructor(
     private readonly sendPriceOfferUseCase: SendPriceOfferUseCase,
     private readonly respondPriceOfferUseCase: RespondPriceOfferUseCase,
-    private readonly priceOfferRepository: IPriceOfferRepository, // 一覧取得などの単純な読み取り操作用
+    private readonly getPriceOffersUseCase: GetPriceOffersUseCase,
   ) {}
 
   /**
    * 取引に紐づくオファーの一覧を取得する。
    * (GET /api/price-offers/:transactionId)
    */
-  async getOffersByTransaction(req: Request, res: Response): Promise<void> {
+  async getOffersByTransaction(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { transactionId } = req.params;
 
@@ -31,22 +33,28 @@ export class PriceOfferController {
         return;
       }
 
-      // 注意: 認証ミドルウェアで req.user がセットされている前提
-      const requesterId = (req as any).user?.id;
-      if (!requesterId) {
+      if (!req.user) {
         res.status(401).json({ error: '認証が必要です' });
         return;
       }
 
-      // Repositoryを直接呼び出して取得
-      // （閲覧権限はRLSまたはUseCaseでチェックすべきだが、簡略化のためここで取得後チェックでも良い。
-      // ただし今回はSupabaseのRLSに頼るか、単純に取得してそのまま返す。）
-      const offers = await this.priceOfferRepository.findByTransactionId(transactionId);
+      const offers = await this.getPriceOffersUseCase.execute(transactionId, req.user.id);
       
-      // 厳密には当事者チェックが必要だが、RLSがかかっていれば当事者以外は空配列になる
       res.status(200).json(offers);
     } catch (error) {
       console.error('[PriceOfferController.getOffersByTransaction]', error);
+
+      if (error instanceof Error) {
+        if (error instanceof NotFoundError) {
+          res.status(404).json({ error: error.message });
+          return;
+        }
+        if (error instanceof ForbiddenError) {
+          res.status(403).json({ error: error.message });
+          return;
+        }
+      }
+
       res.status(500).json({ error: 'サーバーエラーが発生しました' });
     }
   }
@@ -55,14 +63,13 @@ export class PriceOfferController {
    * 新しい価格オファーを送信する。
    * (POST /api/price-offers)
    */
-  async sendOffer(req: Request, res: Response): Promise<void> {
+  async sendOffer(req: AuthRequest, res: Response): Promise<void> {
     try {
-      // 認証ユーザーIDの取得
-      const senderId = (req as any).user?.id;
-      if (!senderId) {
+      if (!req.user) {
         res.status(401).json({ error: '認証が必要です' });
         return;
       }
+      const senderId = req.user.id;
 
       // req.body のオブジェクトチェック
       if (typeof req.body !== 'object' || req.body === null || Array.isArray(req.body)) {
@@ -116,7 +123,7 @@ export class PriceOfferController {
    * 受信したオファーに対して回答（承認/辞退）する。
    * (PATCH /api/price-offers/:id/respond)
    */
-  async respondToOffer(req: Request, res: Response): Promise<void> {
+  async respondToOffer(req: AuthRequest, res: Response): Promise<void> {
     try {
       const offerId = req.params.id;
       if (typeof offerId !== 'string' || !isValidUuid(offerId)) {
@@ -124,11 +131,11 @@ export class PriceOfferController {
         return;
       }
 
-      const requesterId = (req as any).user?.id;
-      if (!requesterId) {
+      if (!req.user) {
         res.status(401).json({ error: '認証が必要です' });
         return;
       }
+      const requesterId = req.user.id;
 
       if (typeof req.body !== 'object' || req.body === null || Array.isArray(req.body)) {
         res.status(400).json({ error: 'リクエストボディはオブジェクトで指定してください' });

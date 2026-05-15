@@ -52,26 +52,19 @@ export class SendPriceOfferUseCase {
       );
     }
 
-    // 並行オファーの禁止（保留中のオファーがあるか）
-    const pendingOffer = await this.priceOfferRepository.findPendingByTransactionId(
-      input.transaction_id,
-    );
-    if (pendingOffer) {
-      throw new ForbiddenError(
-        '相手からの未回答のオファーが既に存在するため、新しいオファーは送信できません',
-      );
+    // 並行オファーや回数上限のチェックと作成を原子的に行う
+    try {
+      return await this.priceOfferRepository.createAtomically(input);
+    } catch (error: any) {
+      if (error.message === 'PENDING_EXISTS') {
+        throw new ForbiddenError(
+          '相手からの未回答のオファーが既に存在するため、新しいオファーは送信できません',
+        );
+      }
+      if (error.message === 'LIMIT_EXCEEDED') {
+        throw new ForbiddenError('この取引での価格交渉回数の上限（3回）に達しました');
+      }
+      throw error;
     }
-
-    // 回数制限の確認（最大3回まで）
-    const currentCount = await this.priceOfferRepository.countByTransactionId(
-      input.transaction_id,
-    );
-    if (currentCount >= 3) {
-      throw new ForbiddenError('この取引での価格交渉回数の上限（3回）に達しました');
-    }
-
-    // 新しいオファーの回数を計算して作成
-    const newOfferCount = currentCount + 1;
-    return await this.priceOfferRepository.create(input, newOfferCount);
   }
 }

@@ -62,17 +62,27 @@ export class RespondPriceOfferUseCase {
       throw new ValidationError(`このオファーは既に ${offer.status} と回答されています`);
     }
 
-    // 承認（accepted）の場合は、取引のfinal_priceも同時に更新する
-    if (input.status === 'accepted') {
-      return await this.priceOfferRepository.respondAtomically(
-        offerId,
-        'accepted',
-        transaction.id,
-        offer.price,
-      );
-    }
+    try {
+      // 承認（accepted）の場合は、取引のfinal_priceも同時に更新する
+      if (input.status === 'accepted') {
+        return await this.priceOfferRepository.respondAtomically(
+          offerId,
+          'accepted',
+          transaction.id,
+          offer.price,
+        );
+      }
 
-    // 辞退（rejected）の場合は、オファーのステータスのみ更新する
-    return await this.priceOfferRepository.updateStatus(offerId, 'rejected');
+      // 辞退（rejected）の場合は、オファーのステータスのみ更新する
+      return await this.priceOfferRepository.updateStatus(offerId, 'rejected');
+    } catch (error: any) {
+      if (error.message === 'ALREADY_RESPONDED') {
+        throw new ValidationError('このオファーはすでに回答済みか存在しません');
+      }
+      if (error.message === 'NOT_FOUND') {
+        throw new NotFoundError('指定したオファーが見つかりません');
+      }
+      throw error;
+    }
   }
 }
