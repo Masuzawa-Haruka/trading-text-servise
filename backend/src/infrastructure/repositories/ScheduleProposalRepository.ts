@@ -85,7 +85,7 @@ export class ScheduleProposalRepository implements IScheduleProposalRepository {
       // 1. 指定された候補を承認
       // 競合回避のため updateMany + count チェック
       const updateResult = await tx.scheduleProposal.updateMany({
-        where: { id: proposalId, status: 'pending' },
+        where: { id: proposalId, transaction_id: transactionId, status: 'pending' },
         data: { status: 'accepted' },
       });
 
