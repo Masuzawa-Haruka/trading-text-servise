@@ -25,9 +25,10 @@ export class EvaluationRepository implements IEvaluationRepository {
     return await prisma.$transaction(async (tx) => {
       // 1. 取引の評価フラグを更新
       const updateData = role === 'seller' ? { seller_evaluated: true } : { buyer_evaluated: true };
+      const whereCondition = role === 'seller' ? { seller_evaluated: false } : { buyer_evaluated: false };
       
       const txUpdateResult = await tx.transaction.updateMany({
-        where: { id: transactionId, status: 'scheduled' },
+        where: { id: transactionId, status: { in: ['scheduled', 'completed'] }, ...whereCondition },
         data: updateData,
       });
 
@@ -63,9 +64,10 @@ export class EvaluationRepository implements IEvaluationRepository {
     return await prisma.$transaction(async (tx) => {
       // 1. 取引の評価フラグを更新し、ステータスを completed にする
       const updateData = role === 'seller' ? { seller_evaluated: true } : { buyer_evaluated: true };
+      const whereCondition = role === 'seller' ? { seller_evaluated: false } : { buyer_evaluated: false };
       
       const txUpdateResult = await tx.transaction.updateMany({
-        where: { id: transactionId, status: 'scheduled' },
+        where: { id: transactionId, status: { in: ['scheduled', 'completed'] }, ...whereCondition },
         data: {
           ...updateData,
           status: 'completed',
@@ -104,7 +106,7 @@ export class EvaluationRepository implements IEvaluationRepository {
 
       // 1人目の評価による、自分へのスコア加算
       await tx.user.update({
-        where: { id: counterpartEvaluation.target_user_id }, // これは自分(reviewerId)のはず
+        where: { id: reviewerId },
         data: {
           credit_score: { increment: counterpartEvaluation.score_change },
         },

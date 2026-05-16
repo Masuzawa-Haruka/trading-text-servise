@@ -27,8 +27,10 @@ export class SubmitEvaluationUseCase {
       throw new NotFoundError('取引が見つかりません');
     }
 
-    if (transaction.status !== 'scheduled') {
-      throw new ForbiddenError('評価は日時確定後の取引でのみ行えます');
+    const isEvaluationAllowedStatus =
+      transaction.status === 'scheduled' || transaction.status === 'completed';
+    if (!isEvaluationAllowedStatus) {
+      throw new ForbiddenError('評価は日時確定後または完了済みの未評価取引でのみ行えます');
     }
 
     // ロール判定
@@ -70,9 +72,13 @@ export class SubmitEvaluationUseCase {
           // データ不整合
           throw new Error('相手の評価データが見つかりません');
         }
+        
+        if (counterpartEvalEntity.target_user_id !== requesterId) {
+          throw new Error('相手の評価データの対象ユーザーが不正です');
+        }
 
         const counterpartEvaluation: PendingEvaluationData = {
-          target_user_id: counterpartEvalEntity.target_user_id, // 相手が評価した対象＝自分のはず
+          target_user_id: counterpartEvalEntity.target_user_id,
           score_change: counterpartEvalEntity.score_change,
         };
 
