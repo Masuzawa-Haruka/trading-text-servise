@@ -27,10 +27,8 @@ export class SubmitEvaluationUseCase {
       throw new NotFoundError('取引が見つかりません');
     }
 
-    const isEvaluationAllowedStatus =
-      transaction.status === 'scheduled' || transaction.status === 'completed';
-    if (!isEvaluationAllowedStatus) {
-      throw new ForbiddenError('評価は日時確定後または完了済みの未評価取引でのみ行えます');
+    if (transaction.status !== 'scheduled') {
+      throw new ForbiddenError('評価は日時確定後の取引でのみ行えます');
     }
 
     // ロール判定
@@ -59,50 +57,16 @@ export class SubmitEvaluationUseCase {
 
     const scoreChange = type === 'good' ? 10 : -10;
 
-    const isLastEvaluator = counterpartHasEvaluated;
-
     try {
-      if (isLastEvaluator) {
-        // 相手が既に評価済みなので、完了処理を行う
-        // 相手の評価を取得する
-        const allEvaluations = await this.evaluationRepository.findByTransactionId(transaction_id);
-        const counterpartEvalEntity = allEvaluations.find(e => e.reviewer_id === targetUserId);
-        
-        if (!counterpartEvalEntity) {
-          // データ不整合
-          throw new Error('相手の評価データが見つかりません');
-        }
-        
-        if (counterpartEvalEntity.target_user_id !== requesterId) {
-          throw new Error('相手の評価データの対象ユーザーが不正です');
-        }
-
-        const counterpartEvaluation: PendingEvaluationData = {
-          target_user_id: counterpartEvalEntity.target_user_id,
-          score_change: counterpartEvalEntity.score_change,
-        };
-
-        return await this.evaluationRepository.submitSecondEvaluationAtomically(
-          transaction_id,
-          transaction.item_id,
-          requesterId,
-          targetUserId,
-          role,
-          type,
-          scoreChange,
-          counterpartEvaluation
-        );
-      } else {
-        // 自分が1人目の評価者
-        return await this.evaluationRepository.submitFirstEvaluationAtomically(
-          transaction_id,
-          requesterId,
-          targetUserId,
-          role,
-          type,
-          scoreChange
-        );
-      }
+      return await this.evaluationRepository.submitEvaluationAtomically(
+        transaction_id,
+        transaction.item_id,
+        requesterId,
+        targetUserId,
+        role,
+        type,
+        scoreChange
+      );
     } catch (error: any) {
       if (error.message === 'INVALID_TRANSITION') {
         throw new ValidationError('取引のステータスが不正なため、評価を完了できませんでした');

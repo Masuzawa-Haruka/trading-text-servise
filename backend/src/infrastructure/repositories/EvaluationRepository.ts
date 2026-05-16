@@ -14,8 +14,9 @@ export class EvaluationRepository implements IEvaluationRepository {
     return evaluations.map((e) => this.toEntity(e));
   }
 
-  async submitFirstEvaluationAtomically(
+  async submitEvaluationAtomically(
     transactionId: string,
+    itemId: string,
     reviewerId: string,
     targetUserId: string,
     role: 'seller' | 'buyer',
@@ -23,12 +24,12 @@ export class EvaluationRepository implements IEvaluationRepository {
     scoreChange: number
   ): Promise<EvaluationEntity> {
     return await prisma.$transaction(async (tx) => {
-      // 1. 取引の評価フラグを更新
+      // 1. 取引の評価フラグを更新（updateMany で対象行をロックし競合を防ぐ）
       const updateData = role === 'seller' ? { seller_evaluated: true } : { buyer_evaluated: true };
       const whereCondition = role === 'seller' ? { seller_evaluated: false } : { buyer_evaluated: false };
       
       const txUpdateResult = await tx.transaction.updateMany({
-        where: { id: transactionId, status: { in: ['scheduled', 'completed'] }, ...whereCondition },
+        where: { id: transactionId, status: 'scheduled', ...whereCondition },
         data: updateData,
       });
 
@@ -47,70 +48,37 @@ export class EvaluationRepository implements IEvaluationRepository {
         },
       });
 
-      return this.toEntity(evaluation);
-    });
-  }
-
-  async submitSecondEvaluationAtomically(
-    transactionId: string,
-    itemId: string,
-    reviewerId: string,
-    targetUserId: string,
-    role: 'seller' | 'buyer',
-    type: EvaluationType,
-    scoreChange: number,
-    counterpartEvaluation: PendingEvaluationData
-  ): Promise<EvaluationEntity> {
-    return await prisma.$transaction(async (tx) => {
-      // 1. 取引の評価フラグを更新し、ステータスを completed にする
-      const updateData = role === 'seller' ? { seller_evaluated: true } : { buyer_evaluated: true };
-      const whereCondition = role === 'seller' ? { seller_evaluated: false } : { buyer_evaluated: false };
-      
-      const txUpdateResult = await tx.transaction.updateMany({
-        where: { id: transactionId, status: { in: ['scheduled', 'completed'] }, ...whereCondition },
-        data: {
-          ...updateData,
-          status: 'completed',
-        },
+      // 3. 最新の取引状態を取得（並行して相手も評価した可能性があるため）
+      const currentTx = await tx.transaction.findUniqueOrThrow({
+        where: { id: transactionId }
       });
 
-      if (txUpdateResult.count === 0) {
-        throw new Error('INVALID_TRANSITION');
+      // 4. 両方 true になったかチェック
+      if (currentTx.seller_evaluated && currentTx.buyer_evaluated && currentTx.status !== 'completed') {
+        // 取引ステータスを completed に
+        await tx.transaction.update({
+          where: { id: transactionId },
+          data: { status: 'completed' }
+        });
+        
+        // アイテムを completed に
+        await tx.item.update({
+          where: { id: itemId },
+          data: { status: 'completed' }
+        });
+
+        // 双方の評価を取得してスコア更新
+        const allEvals = await tx.evaluation.findMany({
+          where: { transaction_id: transactionId }
+        });
+
+        for (const ev of allEvals) {
+          await tx.user.update({
+            where: { id: ev.target_user_id },
+            data: { credit_score: { increment: ev.score_change } }
+          });
+        }
       }
-
-      // 2. アイテムのステータスを completed に更新
-      await tx.item.update({
-        where: { id: itemId },
-        data: { status: 'completed' },
-      });
-
-      // 3. 今回の評価ログの保存
-      const evaluation = await tx.evaluation.create({
-        data: {
-          transaction_id: transactionId,
-          target_user_id: targetUserId,
-          reviewer_id: reviewerId,
-          type: type,
-          score_change: scoreChange,
-        },
-      });
-
-      // 4. 双方の信用スコア（credit_score）を更新
-      // 今回の評価による、相手へのスコア加算
-      await tx.user.update({
-        where: { id: targetUserId },
-        data: {
-          credit_score: { increment: scoreChange },
-        },
-      });
-
-      // 1人目の評価による、自分へのスコア加算
-      await tx.user.update({
-        where: { id: reviewerId },
-        data: {
-          credit_score: { increment: counterpartEvaluation.score_change },
-        },
-      });
 
       return this.toEntity(evaluation);
     });

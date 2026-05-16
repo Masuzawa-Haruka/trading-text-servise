@@ -10,30 +10,15 @@ export interface IEvaluationRepository {
   findByTransactionId(transactionId: string): Promise<EvaluationEntity[]>;
 
   /**
-   * 1人目の評価を保存する。
-   * 取引の評価フラグ（seller_evaluated / buyer_evaluated）を更新する。
-   * （この時点ではステータスや信用スコアは更新しない）
+   * 評価を保存し、双方の評価が揃った場合は原子的に完了処理（ステータス・スコア更新）を行う。
    */
-  submitFirstEvaluationAtomically(
-    transactionId: string,
-    reviewerId: string,
-    targetUserId: string,
-    role: 'seller' | 'buyer',
-    type: EvaluationType,
-    scoreChange: number
-  ): Promise<EvaluationEntity>;
-
-  /**
-   * 2人目の評価を保存し、同時に取引・アイテムの完了処理、双方の信用スコア更新を原子的に行う。
-   */
-  submitSecondEvaluationAtomically(
+  submitEvaluationAtomically(
     transactionId: string,
     itemId: string,
     reviewerId: string,
     targetUserId: string,
     role: 'seller' | 'buyer',
     type: EvaluationType,
-    scoreChange: number,
-    counterpartEvaluation: PendingEvaluationData
+    scoreChange: number
   ): Promise<EvaluationEntity>;
 }
