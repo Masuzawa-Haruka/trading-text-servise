@@ -21,29 +21,26 @@ export class RequestCancellationUseCase {
     const isSeller = transaction.seller_id === requesterId;
     const isBuyer = transaction.buyer_id === requesterId;
     if (!isSeller && !isBuyer) {
-      throw new ForbiddenError('この取引のキャンセル申請を行う権限がありません');
+      throw new ForbiddenError('この取引のキャンセルを実行する権限がありません');
     }
 
     // 2. 取引ステータスチェック (日時・場所確定後の取引でのみ行える)
     if (transaction.status !== 'scheduled') {
-      throw new ForbiddenError('キャンセル申請は日時確定後の取引でのみ行えます');
+      throw new ForbiddenError('キャンセル実行は日時確定後の取引でのみ行えます');
     }
 
-    // 3. 既にキャンセル申請が存在していないかチェック
-    const existingRequest = await this.cancellationRepository.findByTransactionId(transaction_id);
-    if (existingRequest) {
-      if (existingRequest.status === 'pending') {
-        throw new ValidationError('既にキャンセル申請が送信されています');
+    try {
+      return await this.cancellationRepository.executeCancellationAtomically(
+        transaction_id,
+        transaction.item_id,
+        requesterId,
+        reason
+      );
+    } catch (error: any) {
+      if (error.message === 'INVALID_TRANSITION') {
+        throw new ValidationError('取引のステータスが不正なため、キャンセルを実行できませんでした');
       }
-      if (existingRequest.status === 'accepted') {
-        throw new ValidationError('この取引は既にキャンセルされています');
-      }
+      throw error;
     }
-
-    return await this.cancellationRepository.createCancellationRequest(
-      transaction_id,
-      requesterId,
-      reason
-    );
   }
 }

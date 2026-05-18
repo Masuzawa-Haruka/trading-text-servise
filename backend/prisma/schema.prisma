@@ -39,8 +39,11 @@ enum ProposalStatus {
 }
 
 enum CancellationStatus {
+  /// Compatibility value from the old request/response flow. New immediate cancellations use accepted.
   pending
+  /// Immediate cancellation has been executed.
   accepted
+  /// Compatibility value from the old request/response flow.
   rejected
 }
 
@@ -208,6 +211,9 @@ model Notification {
   @@map("notifications")
 }
 
+/// Immediate cancellation history.
+/// TODO: After backend cancellation APIs stabilize, rename this to CancellationEvent/Cancellation
+/// and replace CancellationStatus with an executed-style enum/value.
 model CancellationRequest {
   id             String             @id @default(uuid()) @db.Uuid
   transaction_id String             @unique @db.Uuid

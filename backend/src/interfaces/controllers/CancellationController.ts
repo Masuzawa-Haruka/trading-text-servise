@@ -17,8 +17,9 @@ export class CancellationController {
   ) {}
 
   /**
-   * キャンセル申請を送信する
-   * POST /api/cancellations/request
+   * キャンセルを即時実行する
+   * POST /api/cancellations/execute
+   * POST /api/cancellations/request (deprecated alias)
    */
   async requestCancellation(req: AuthRequest, res: Response): Promise<void> {
     try {
@@ -56,8 +57,8 @@ export class CancellationController {
   }
 
   /**
-   * キャンセル申請に回答する (承認 / 拒否)
-   * POST /api/cancellations/respond
+   * 旧キャンセル申請に回答する (現在は即時実行のため使用不可)
+   * POST /api/cancellations/respond (deprecated)
    */
   async respondCancellation(req: AuthRequest, res: Response): Promise<void> {
     try {

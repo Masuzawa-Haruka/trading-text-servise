@@ -14,7 +14,7 @@ const cancellationRepository = new CancellationRepository();
 const transactionRepository = new TransactionRepository();
 
 const requestCancellationUseCase = new RequestCancellationUseCase(cancellationRepository, transactionRepository);
-const respondCancellationUseCase = new RespondCancellationUseCase(cancellationRepository, transactionRepository);
+const respondCancellationUseCase = new RespondCancellationUseCase(cancellationRepository);
 const reportNoShowUseCase = new ReportNoShowUseCase(cancellationRepository, transactionRepository);
 
 const controller = new CancellationController(
@@ -25,7 +25,10 @@ const controller = new CancellationController(
 
 router.use(authenticateToken);
 
+router.post('/execute', controller.requestCancellation.bind(controller));
+// Deprecated: kept as a compatibility alias for older clients. Use /execute for new code.
 router.post('/request', controller.requestCancellation.bind(controller));
+// Deprecated: cancellation is executed immediately, so accept/reject responses are no longer supported.
 router.post('/respond', controller.respondCancellation.bind(controller));
 router.post('/no-show', controller.reportNoShow.bind(controller));
 

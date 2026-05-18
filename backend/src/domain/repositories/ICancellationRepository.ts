@@ -8,33 +8,17 @@ export interface ICancellationRepository {
   findByTransactionId(transactionId: string): Promise<CancellationRequestEntity | null>;
 
   /**
-   * キャンセル申請を作成する
-   */
-  createCancellationRequest(
-    transactionId: string,
-    requesterId: string,
-    reason?: string
-  ): Promise<CancellationRequestEntity>;
-
-  /**
-   * キャンセル申請を拒否する
-   */
-  rejectCancellationRequest(cancellationId: string): Promise<CancellationRequestEntity>;
-
-  /**
-   * キャンセル申請を承認し、ペナルティ（-10点）付与と取引のステータス変更を原子的に行う
-   * @param cancellationId キャンセル申請ID
+   * キャンセルを即時実行し、ペナルティ（-10点）付与と取引のステータス変更を原子的に行う
    * @param transactionId 取引ID
    * @param itemId アイテムID
-   * @param requesterId キャンセル申請者ID（ペナルティ対象）
-   * @param responderId キャンセル承認者ID
+   * @param requesterId キャンセル実行者ID（ペナルティ対象）
+   * @param reason キャンセル理由
    */
-  acceptCancellationAtomically(
-    cancellationId: string,
+  executeCancellationAtomically(
     transactionId: string,
     itemId: string,
     requesterId: string,
-    responderId: string
+    reason?: string
   ): Promise<CancellationRequestEntity>;
 
   /**
