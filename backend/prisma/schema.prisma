@@ -38,6 +38,12 @@ enum ProposalStatus {
   rejected
 }
 
+enum CancellationStatus {
+  pending
+  accepted
+  rejected
+}
+
 enum OfferStatus {
   pending
   accepted
@@ -72,6 +78,7 @@ model User {
   proposalsSent     ScheduleProposal[] @relation("SenderProposals")
   offersSent        PriceOffer[]       @relation("SenderOffers")
   messagesSent      Message[]          @relation("SenderMessages")
+  cancellationsSent CancellationRequest[] @relation("RequesterCancellations")
   evaluationsTarget Evaluation[]       @relation("TargetEvaluations")
   evaluationsGiven  Evaluation[]       @relation("ReviewerEvaluations")
   notifications     Notification[]     @relation("ReceiverNotifications")
@@ -118,6 +125,7 @@ model Transaction {
 
   proposals   ScheduleProposal[]
   priceOffers PriceOffer[]
+  cancellations CancellationRequest[]
   messages    Message[]
   evaluations Evaluation[]
 
@@ -198,4 +206,18 @@ model Notification {
   updated_at     DateTime         @updatedAt
 
   @@map("notifications")
+}
+
+model CancellationRequest {
+  id             String             @id @default(uuid()) @db.Uuid
+  transaction_id String             @unique @db.Uuid
+  transaction    Transaction        @relation(fields: [transaction_id], references: [id])
+  requester_id   String             @db.Uuid
+  requester      User               @relation("RequesterCancellations", fields: [requester_id], references: [id])
+  reason         String?
+  status         CancellationStatus @default(pending)
+  created_at     DateTime           @default(now())
+  updated_at     DateTime           @updatedAt
+
+  @@map("cancellation_requests")
 }
