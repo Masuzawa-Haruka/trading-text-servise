@@ -1,6 +1,8 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import userRoutes from './infrastructure/routes/userRoutes';
 import itemRoutes from './infrastructure/routes/itemRoutes';
 import transactionRoutes from './infrastructure/routes/transactionRoutes';
@@ -8,7 +10,7 @@ import priceOfferRoutes from './infrastructure/routes/priceOfferRoutes';
 import scheduleProposalRoutes from './infrastructure/routes/scheduleProposalRoutes';
 import messageRoutes from './infrastructure/routes/messageRoutes';
 import evaluationRoutes from './infrastructure/routes/evaluationRoutes';
-dotenv.config();
+import cancellationRoutes from './infrastructure/routes/cancellationRoutes';
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -27,6 +29,7 @@ app.use('/api/price-offers', priceOfferRoutes);
 app.use('/api/schedule-proposals', scheduleProposalRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/evaluations', evaluationRoutes);
+app.use('/api/cancellations', cancellationRoutes);
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
