@@ -14,7 +14,7 @@ const cancellationRepository = new CancellationRepository();
 const transactionRepository = new TransactionRepository();
 
 const requestCancellationUseCase = new RequestCancellationUseCase(cancellationRepository, transactionRepository);
-const respondCancellationUseCase = new RespondCancellationUseCase(cancellationRepository);
+const respondCancellationUseCase = new RespondCancellationUseCase();
 const reportNoShowUseCase = new ReportNoShowUseCase(cancellationRepository, transactionRepository);
 
 const controller = new CancellationController(

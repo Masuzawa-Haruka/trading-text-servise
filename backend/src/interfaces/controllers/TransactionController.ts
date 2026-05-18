@@ -134,6 +134,13 @@ export class TransactionController {
         return;
       }
 
+      if (status === 'canceled') {
+        res.status(400).json({
+          error: 'キャンセルは /api/cancellations/execute から実行してください',
+        });
+        return;
+      }
+
       // final_price: 0 以上かつ Prisma Int 上限（32bit 符号付き整数）以内の整数を検証
       if (
         final_price !== undefined &&
