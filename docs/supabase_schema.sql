@@ -1,14 +1,18 @@
 -- ==========================================
 -- Enum Types
 -- ==========================================
-CREATE TYPE user_status AS ENUM ('active', 'warning', 'suspended');
-CREATE TYPE item_status AS ENUM ('available', 'matching', 'completed', 'canceled');
-CREATE TYPE item_condition AS ENUM ('new', 'used_good', 'used_bad');
-CREATE TYPE transaction_status AS ENUM ('proposing', 'scheduled', 'completed', 'canceled');
-CREATE TYPE proposal_status AS ENUM ('pending', 'accepted', 'rejected');
-CREATE TYPE offer_status AS ENUM ('pending', 'accepted', 'rejected');
-CREATE TYPE evaluation_type AS ENUM ('good', 'bad', 'cancel', 'no_show');
-CREATE TYPE notification_type AS ENUM ('action_required', 'info');
+-- Synced from backend/prisma/schema.prisma
+-- Last updated: 2026-05-19
+
+CREATE TYPE "UserStatus" AS ENUM ('active', 'warning', 'suspended');
+CREATE TYPE "ItemStatus" AS ENUM ('available', 'matching', 'completed', 'canceled');
+CREATE TYPE "ItemCondition" AS ENUM ('new', 'used_good', 'used_bad');
+CREATE TYPE "TransactionStatus" AS ENUM ('proposing', 'scheduled', 'completed', 'canceled');
+CREATE TYPE "ProposalStatus" AS ENUM ('pending', 'accepted', 'rejected');
+CREATE TYPE "CancellationStatus" AS ENUM ('pending', 'accepted', 'rejected');
+CREATE TYPE "OfferStatus" AS ENUM ('pending', 'accepted', 'rejected');
+CREATE TYPE "EvaluationType" AS ENUM ('good', 'bad', 'cancel', 'no_show');
+CREATE TYPE "NotificationType" AS ENUM ('action_required', 'info');
 
 -- ==========================================
 -- Tables
@@ -16,12 +20,12 @@ CREATE TYPE notification_type AS ENUM ('action_required', 'info');
 
 -- 1. Users
 CREATE TABLE users (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR UNIQUE NOT NULL,
     nickname VARCHAR NOT NULL,
     profile_image_url VARCHAR,
     credit_score INT DEFAULT 100,
-    status user_status DEFAULT 'active',
+    status "UserStatus" DEFAULT 'active',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -32,11 +36,11 @@ CREATE TABLE items (
     seller_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR NOT NULL,
     description TEXT,
-    condition item_condition DEFAULT 'new',
+    condition "ItemCondition" DEFAULT 'new',
     category VARCHAR,
     price INT DEFAULT 0,
     image_url VARCHAR,
-    status item_status DEFAULT 'available',
+    status "ItemStatus" DEFAULT 'available',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -48,7 +52,7 @@ CREATE TABLE transactions (
     seller_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     buyer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     final_price INT,
-    status transaction_status DEFAULT 'proposing',
+    status "TransactionStatus" DEFAULT 'proposing',
     meeting_datetime TIMESTAMPTZ,
     meeting_place VARCHAR,
     seller_evaluated BOOLEAN DEFAULT false,
@@ -64,7 +68,7 @@ CREATE TABLE schedule_proposals (
     sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     proposed_datetime TIMESTAMPTZ NOT NULL,
     proposed_place VARCHAR NOT NULL,
-    status proposal_status DEFAULT 'pending',
+    status "ProposalStatus" DEFAULT 'pending',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -75,7 +79,7 @@ CREATE TABLE price_offers (
     transaction_id UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
     sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     price INT NOT NULL CHECK (price >= 0),
-    status offer_status DEFAULT 'pending',
+    status "OfferStatus" DEFAULT 'pending',
     offer_count INT NOT NULL CHECK (offer_count BETWEEN 1 AND 3),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -98,7 +102,7 @@ CREATE TABLE evaluations (
     target_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     reviewer_id UUID REFERENCES users(id) ON DELETE SET NULL,
     score_change INT NOT NULL,
-    type evaluation_type NOT NULL,
+    type "EvaluationType" NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -109,9 +113,21 @@ CREATE TABLE notifications (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     actor_id UUID REFERENCES users(id) ON DELETE SET NULL,
     title VARCHAR NOT NULL,
-    type notification_type NOT NULL,
+    type "NotificationType" NOT NULL,
     transaction_id UUID,
     is_read BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 10. Cancellation Requests (Immediate cancellation history)
+-- After backend cancellation APIs stabilize, rename this to CancellationEvent/Cancellation
+CREATE TABLE cancellation_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    transaction_id UUID NOT NULL UNIQUE REFERENCES transactions(id) ON DELETE CASCADE,
+    requester_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reason TEXT,
+    status "CancellationStatus" DEFAULT 'pending',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -129,6 +145,7 @@ ALTER TABLE price_offers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evaluations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cancellation_requests ENABLE ROW LEVEL SECURITY;
 
 -- ------------------------------------------
 -- 1. Users
@@ -249,6 +266,28 @@ USING (auth.uid() = user_id);
 CREATE POLICY "Users can update own notifications" ON notifications FOR UPDATE 
 USING (auth.uid() = user_id);
 
+-- ------------------------------------------
+-- 9. Cancellation History
+-- 取引の当事者のみ閲覧可能
+CREATE POLICY "Parties can view cancellation history" ON cancellation_requests FOR SELECT 
+USING (
+    EXISTS (
+        SELECT 1 FROM transactions t 
+        WHERE t.id = cancellation_requests.transaction_id 
+        AND (t.seller_id = auth.uid() OR t.buyer_id = auth.uid())
+    )
+);
+-- キャンセル実行者としてのみ作成可能
+CREATE POLICY "Parties can insert cancellation history" ON cancellation_requests FOR INSERT 
+WITH CHECK (
+    auth.uid() = requester_id
+    AND EXISTS (
+        SELECT 1 FROM transactions t 
+        WHERE t.id = cancellation_requests.transaction_id 
+        AND (t.seller_id = auth.uid() OR t.buyer_id = auth.uid())
+    )
+);
+
 -- ==========================================
 -- Triggers for updated_at
 -- ==========================================
@@ -267,6 +306,7 @@ CREATE TRIGGER update_schedule_proposals_modtime BEFORE UPDATE ON schedule_propo
 CREATE TRIGGER update_price_offers_modtime BEFORE UPDATE ON price_offers FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_evaluations_modtime BEFORE UPDATE ON evaluations FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_notifications_modtime BEFORE UPDATE ON notifications FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+CREATE TRIGGER update_cancellation_requests_modtime BEFORE UPDATE ON cancellation_requests FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 
 -- ==========================================
 -- Auth Trigger (Auto-create public.users)

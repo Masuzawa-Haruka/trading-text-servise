@@ -8,9 +8,10 @@
  * 2. ステートマシン: VALID_TRANSITIONS で許可された遷移のみ実行可能
  * 3. ロール制御: TRANSITION_ALLOWED_ROLES で遷移ごとに実行可能なロールを制限
  *    - proposing → scheduled は出品者のみ（承認操作）
- *    - キャンセル・完了は双方可能
+ *    - 完了は双方可能
  * 4. scheduled 前提条件: meeting_datetime と meeting_place が必須
- * 5. 出品ステータス同期: completed/canceled 時に出品ステータスも原子的に更新
+ * 5. 出品ステータス同期: completed 時に出品ステータスも原子的に更新
+ * 6. キャンセルは /api/cancellations/execute に一本化し、評価ログ・信用スコア更新を必ず通す
  */
 import { ITransactionRepository } from '../domain/repositories/ITransactionRepository';
 import {
@@ -52,6 +53,12 @@ export class UpdateTransactionUseCase {
 
     // ステータス変更が要求された場合の各種検証
     if (input.status !== undefined) {
+      if (input.status === 'canceled') {
+        throw new ForbiddenError(
+          'キャンセルは /api/cancellations/execute から実行してください',
+        );
+      }
+
       // ステートマシン検証: 許可された遷移かどうかを確認
       const allowedNext = VALID_TRANSITIONS[transaction.status];
       if (!allowedNext.includes(input.status)) {
@@ -84,9 +91,8 @@ export class UpdateTransactionUseCase {
 
       // 出品ステータスの同期が必要な遷移では原子的に更新する
       // completed → 出品を completed に（取引完了）
-      // canceled → 出品を available に戻す（再募集可能に）
-      if (input.status === 'completed' || input.status === 'canceled') {
-        const itemStatus = input.status === 'completed' ? 'completed' as const : 'available' as const;
+      if (input.status === 'completed') {
+        const itemStatus = 'completed' as const;
         return await this.transactionRepository.updateWithItemSync(
           id,
           input,
