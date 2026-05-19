@@ -88,14 +88,14 @@ export default function MyPage() {
       
       <section className="mt-3 bg-white">
         <div className="divide-y divide-slate-100">
-          <button className="flex w-full items-center justify-between px-4 py-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
-            <span>設定</span>
+          <Link href="/mypage/settings/notifications" className="flex w-full items-center justify-between px-4 py-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+            <span>プッシュ通知</span>
             <span className="text-slate-400">&gt;</span>
-          </button>
-          <button className="flex w-full items-center justify-between px-4 py-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
-            <span>ヘルプ・お問い合わせ</span>
+          </Link>
+          <Link href="/mypage/support" className="flex w-full items-center justify-between px-4 py-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+            <span>ヘルプ・サポート</span>
             <span className="text-slate-400">&gt;</span>
-          </button>
+          </Link>
         </div>
       </section>
 
