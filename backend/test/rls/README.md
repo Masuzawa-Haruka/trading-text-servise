@@ -12,6 +12,7 @@ STAGING_DATABASE_URL="postgresql://..." npm run test:rls:staging
 ## 前提
 
 - `STAGING_DATABASE_URL` は Supabase のステージングDBへ接続できる Postgres 接続文字列を指定してください。
+- ステージングDBには `docs/migrations/20260520_add_item_images_and_schedule_candidates.sql` 適用後のスキーマが必要です。
 - テストは `BEGIN` したトランザクション内で seed データを作成し、最後に `ROLLBACK` します。
 - `authenticated` ロールに切り替え、`request.jwt.claim.sub` / `request.jwt.claim.role` を設定して RLS の挙動を検証します。
 
