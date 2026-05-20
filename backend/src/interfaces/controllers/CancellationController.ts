@@ -1,27 +1,27 @@
 /**
  * CancellationController
+ *
+ * キャンセル・ドタキャン報告に関するHTTPハンドラー。
+ * 旧 /request・/respond エンドポイントは廃止（cancellationRoutes.ts 参照）。
  */
 import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth';
-import { RequestCancellationUseCase } from '../../usecases/RequestCancellationUseCase';
-import { RespondCancellationUseCase } from '../../usecases/RespondCancellationUseCase';
+import { ExecuteCancellationUseCase } from '../../usecases/ExecuteCancellationUseCase';
 import { ReportNoShowUseCase } from '../../usecases/ReportNoShowUseCase';
-import { NotFoundError, ForbiddenError, ValidationError } from '../../domain/errors';
+import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from '../../domain/errors';
 import { isValidUuid } from '../../lib/validation';
 
 export class CancellationController {
   constructor(
-    private readonly requestCancellationUseCase: RequestCancellationUseCase,
-    private readonly respondCancellationUseCase: RespondCancellationUseCase,
+    private readonly executeCancellationUseCase: ExecuteCancellationUseCase,
     private readonly reportNoShowUseCase: ReportNoShowUseCase
   ) {}
 
   /**
    * キャンセルを即時実行する
    * POST /api/cancellations/execute
-   * POST /api/cancellations/request (deprecated alias)
    */
-  async requestCancellation(req: AuthRequest, res: Response): Promise<void> {
+  async executeCancellation(req: AuthRequest, res: Response): Promise<void> {
     try {
       if (!req.user) {
         res.status(401).json({ error: '認証が必要です' });
@@ -45,53 +45,14 @@ export class CancellationController {
         return;
       }
 
-      const cancellationRequest = await this.requestCancellationUseCase.execute({
-        transaction_id,
-        reason,
-      }, req.user.id);
+      const result = await this.executeCancellationUseCase.execute(
+        { transaction_id, reason },
+        req.user.id
+      );
 
-      res.status(201).json(cancellationRequest);
+      res.status(201).json(result);
     } catch (error) {
-      this.handleError(res, error, '[CancellationController.requestCancellation]');
-    }
-  }
-
-  /**
-   * 旧キャンセル申請に回答する (現在は即時実行のため使用不可)
-   * POST /api/cancellations/respond (deprecated)
-   */
-  async respondCancellation(req: AuthRequest, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({ error: '認証が必要です' });
-        return;
-      }
-
-      if (typeof req.body !== 'object' || req.body === null || Array.isArray(req.body)) {
-        res.status(400).json({ error: 'リクエストボディはオブジェクトで指定してください' });
-        return;
-      }
-
-      const { cancellation_id, action } = req.body;
-
-      if (!isValidUuid(cancellation_id)) {
-        res.status(400).json({ error: '無効なキャンセル申請ID形式です' });
-        return;
-      }
-
-      if (action !== 'accept' && action !== 'reject') {
-        res.status(400).json({ error: 'アクションは accept または reject を指定してください' });
-        return;
-      }
-
-      const cancellationRequest = await this.respondCancellationUseCase.execute({
-        cancellation_id,
-        action,
-      }, req.user.id);
-
-      res.status(200).json(cancellationRequest);
-    } catch (error) {
-      this.handleError(res, error, '[CancellationController.respondCancellation]');
+      this.handleError(res, error, '[CancellationController.executeCancellation]');
     }
   }
 
@@ -118,9 +79,7 @@ export class CancellationController {
         return;
       }
 
-      await this.reportNoShowUseCase.execute({
-        transaction_id,
-      }, req.user.id);
+      await this.reportNoShowUseCase.execute({ transaction_id }, req.user.id);
 
       res.status(200).json({ message: 'ドタキャン報告を受け付け、取引を中止しました' });
     } catch (error) {
@@ -130,19 +89,21 @@ export class CancellationController {
 
   private handleError(res: Response, error: unknown, context: string): void {
     console.error(context, error);
-    if (error instanceof Error) {
-      if (error instanceof NotFoundError) {
-        res.status(404).json({ error: error.message });
-        return;
-      }
-      if (error instanceof ForbiddenError) {
-        res.status(403).json({ error: error.message });
-        return;
-      }
-      if (error instanceof ValidationError) {
-        res.status(400).json({ error: error.message });
-        return;
-      }
+    if (error instanceof NotFoundError) {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof ForbiddenError) {
+      res.status(403).json({ error: error.message });
+      return;
+    }
+    if (error instanceof ValidationError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error instanceof ConflictError) {
+      res.status(409).json({ error: error.message });
+      return;
     }
     res.status(500).json({ error: 'サーバーエラーが発生しました' });
   }
