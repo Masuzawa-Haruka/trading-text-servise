@@ -94,7 +94,7 @@ export class ItemController {
         return;
       }
 
-      const { title, description, condition, category, price, image_url } = req.body;
+      const { title, author, description, condition, category, price, image_urls } = req.body;
 
       // title: 非空文字列であることを検証
       if (typeof title !== 'string' || title.trim() === '') {
@@ -110,18 +110,35 @@ export class ItemController {
         return;
       }
 
+      // image_urls: 配列かつ最大5枚であることを検証
+      if (image_urls !== undefined) {
+        if (!Array.isArray(image_urls)) {
+          res.status(400).json({ error: 'image_urls は文字列の配列で指定してください' });
+          return;
+        }
+        if (image_urls.length > 5) {
+          res.status(400).json({ error: '画像は最大5枚まで登録できます' });
+          return;
+        }
+      }
+
       const item = await this.createItemUseCase.execute({
         seller_id: req.user.id, // 認証情報からseller_idを自動セット（クライアントから受け取らない）
         title: title.trim(),
+        author,
         description,
         condition,
         category,
         price,
-        image_url,
+        image_urls,
       });
       res.status(201).json(item);
-    } catch {
-      res.status(500).json({ error: 'Internal Server Error' });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('画像は最大5枚')) {
+        res.status(400).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: 'Internal Server Error' });
+      }
     }
   };
 
