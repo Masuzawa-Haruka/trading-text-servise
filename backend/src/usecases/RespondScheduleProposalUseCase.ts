@@ -50,16 +50,26 @@ export class RespondScheduleProposalUseCase {
     }
 
     if (input.status === 'accepted') {
+      if (!input.candidate_id) {
+        throw new ValidationError('承認する日時候補を指定してください');
+      }
+      const candidate = proposal.candidates.find(c => c.id === input.candidate_id);
+      if (!candidate) {
+        throw new ValidationError('指定された日時候補はこの提案に属していません');
+      }
+      if (candidate.status !== 'pending') {
+        throw new ValidationError('指定された日時候補は既に保留中ではありません');
+      }
+
       try {
         return await this.scheduleProposalRepository.acceptProposalAtomically(
           proposalId,
           transaction.id,
-          proposal.proposed_datetime,
-          proposal.proposed_place
+          input.candidate_id
         );
       } catch (error: any) {
         if (error.message === 'ALREADY_RESPONDED') {
-          throw new ValidationError('この候補は既に他の操作によって回答済みです');
+          throw new ValidationError('この提案または候補は既に他の操作によって回答済みです');
         }
         if (error.message === 'INVALID_TRANSITION') {
           throw new ValidationError('取引のステータスが不正なため、日程を確定できませんでした');
@@ -67,17 +77,15 @@ export class RespondScheduleProposalUseCase {
         throw error;
       }
     } else {
-      // rejected の場合。
-      // 今回の仕様では「セット」としての却下とするため、本来は一括却下が望ましいが、
-      // 単一候補の却下としても実装は可能。
+      // rejected の場合。親提案と全候補を一括で却下する。
       try {
         return await this.scheduleProposalRepository.rejectProposalAtomically(proposalId);
       } catch (error: any) {
         if (error.message === 'ALREADY_RESPONDED') {
-          throw new ValidationError('この候補は既に他の操作によって回答済みです');
+          throw new ValidationError('この提案は既に回答済みです');
         }
         if (error.message === 'NOT_FOUND') {
-          throw new NotFoundError('指定された候補が見つかりません');
+          throw new NotFoundError('指定された提案が見つかりません');
         }
         throw error;
       }

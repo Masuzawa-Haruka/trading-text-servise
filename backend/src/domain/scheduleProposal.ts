@@ -6,13 +6,22 @@
 
 export type ProposalStatus = 'pending' | 'accepted' | 'rejected';
 
+export interface ScheduleCandidateEntity {
+  id: string;
+  proposal_id: string;
+  proposed_datetime: Date;
+  proposed_place: string;
+  status: ProposalStatus;
+  created_at: Date;
+  updated_at: Date;
+}
+
 export interface ScheduleProposalEntity {
   id: string;
   transaction_id: string;
   sender_id: string;
-  proposed_datetime: Date;
-  proposed_place: string;
   status: ProposalStatus;
+  candidates: ScheduleCandidateEntity[];
   created_at: Date;
   updated_at: Date;
 }
@@ -39,4 +48,6 @@ export interface SendScheduleProposalInput {
  */
 export interface RespondScheduleProposalInput {
   status: 'accepted' | 'rejected';
+  candidate_id?: string; // accepted の場合にどのスロット（Candidate）を選んだかを指定する
 }
+
