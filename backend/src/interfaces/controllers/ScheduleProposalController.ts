@@ -111,6 +111,10 @@ export class ScheduleProposalController {
         res.status(400).json({ error: '承認する場合は candidate_id を指定してください' });
         return;
       }
+      if (status === 'accepted' && !isValidUuid(candidate_id)) {
+        res.status(400).json({ error: '無効な candidate_id 形式です' });
+        return;
+      }
 
       const updated = await this.respondScheduleProposalUseCase.execute(
         proposalId,

@@ -29,3 +29,15 @@ export class ValidationError extends Error {
     this.name = 'ValidationError';
   }
 }
+
+/**
+ * 現在のリソース状態と操作が競合する場合（HTTP 409 に対応）
+ * 入力値自体は正しいが、対象リソースの状態遷移上実行できない操作に使う。
+ * 例: すでにキャンセル済みの取引に再度キャンセル実行、scheduled でない取引への操作。
+ */
+export class ConflictError extends Error {
+  constructor(message = 'リソースの状態と操作が競合しています') {
+    super(message);
+    this.name = 'ConflictError';
+  }
+}

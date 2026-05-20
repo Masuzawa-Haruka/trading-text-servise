@@ -357,6 +357,37 @@ USING (
         AND (t.seller_id = auth.uid() OR t.buyer_id = auth.uid())
     )
 );
+-- 提案送信者のみ候補を作成可能
+CREATE POLICY "Sender can insert schedule candidates" ON schedule_candidates FOR INSERT
+WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM schedule_proposals p
+        JOIN transactions t ON t.id = p.transaction_id
+        WHERE p.id = schedule_candidates.proposal_id
+        AND p.sender_id = auth.uid()
+        AND (t.seller_id = auth.uid() OR t.buyer_id = auth.uid())
+    )
+);
+-- 提案の「受信側（相手）」のみ候補ステータスを更新可能
+CREATE POLICY "Receiver can update schedule candidates" ON schedule_candidates FOR UPDATE
+USING (
+    EXISTS (
+        SELECT 1 FROM schedule_proposals p
+        JOIN transactions t ON t.id = p.transaction_id
+        WHERE p.id = schedule_candidates.proposal_id
+        AND (t.seller_id = auth.uid() OR t.buyer_id = auth.uid())
+        AND auth.uid() != p.sender_id
+    )
+)
+WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM schedule_proposals p
+        JOIN transactions t ON t.id = p.transaction_id
+        WHERE p.id = schedule_candidates.proposal_id
+        AND (t.seller_id = auth.uid() OR t.buyer_id = auth.uid())
+        AND auth.uid() != p.sender_id
+    )
+);
 
 -- ------------------------------------------
 -- 12. Location Areas & Spots
@@ -406,4 +437,3 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
-
