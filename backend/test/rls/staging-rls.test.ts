@@ -30,16 +30,10 @@ const ids = {
 };
 
 let client: PoolClient;
-let hasItemImages = false;
-let hasScheduleCandidates = false;
-let scheduleProposalNeedsTimePlace = false;
 
 before(async () => {
   client = await pool.connect();
   await client.query('BEGIN');
-  hasItemImages = await tableExists(client, 'item_images');
-  hasScheduleCandidates = await tableExists(client, 'schedule_candidates');
-  scheduleProposalNeedsTimePlace = await columnExists(client, 'schedule_proposals', 'proposed_datetime');
   await seedScenario(client);
 });
 
@@ -54,18 +48,12 @@ after(async () => {
 test('ステージングDBで主要テーブルのRLSが有効になっている', async () => {
   const tables = [
     'items',
+    'item_images',
     'transactions',
     'schedule_proposals',
+    'schedule_candidates',
     'cancellation_requests',
   ];
-
-  if (hasScheduleCandidates) {
-    tables.push('schedule_candidates');
-  }
-
-  if (hasItemImages) {
-    tables.unshift('item_images');
-  }
 
   const result = await client.query<{ relname: string; relrowsecurity: boolean }>(
     `
@@ -84,12 +72,7 @@ test('ステージングDBで主要テーブルのRLSが有効になっている
   }
 });
 
-test('schedule_candidates のSELECT/INSERT/UPDATEポリシーが存在する', async (t) => {
-  if (!hasScheduleCandidates) {
-    t.skip('staging に schedule_candidates テーブルが存在しないためスキップ');
-    return;
-  }
-
+test('schedule_candidates のSELECT/INSERT/UPDATEポリシーが存在する', async () => {
   const result = await client.query<{ policyname: string; cmd: string }>(
     `
       SELECT policyname, cmd
@@ -107,23 +90,13 @@ test('schedule_candidates のSELECT/INSERT/UPDATEポリシーが存在する', a
   assert.equal(policies.get('Receiver can update schedule candidates'), 'UPDATE');
 });
 
-test('schedule_candidates は当事者のみ閲覧できる', async (t) => {
-  if (!hasScheduleCandidates) {
-    t.skip('staging に schedule_candidates テーブルが存在しないためスキップ');
-    return;
-  }
-
+test('schedule_candidates は当事者のみ閲覧できる', async () => {
   assert.equal(await countAs(ids.seller, 'SELECT COUNT(*) FROM schedule_candidates WHERE id = $1', [ids.candidate]), 1);
   assert.equal(await countAs(ids.buyer, 'SELECT COUNT(*) FROM schedule_candidates WHERE id = $1', [ids.candidate]), 1);
   assert.equal(await countAs(ids.outsider, 'SELECT COUNT(*) FROM schedule_candidates WHERE id = $1', [ids.candidate]), 0);
 });
 
-test('schedule_candidates は提案送信者のみ作成できる', async (t) => {
-  if (!hasScheduleCandidates) {
-    t.skip('staging に schedule_candidates テーブルが存在しないためスキップ');
-    return;
-  }
-
+test('schedule_candidates は提案送信者のみ作成できる', async () => {
   await assertAllowed(async () => {
     await execAs(
       ids.seller,
@@ -147,12 +120,7 @@ test('schedule_candidates は提案送信者のみ作成できる', async (t) =>
   });
 });
 
-test('schedule_candidates は提案受信者のみ更新できる', async (t) => {
-  if (!hasScheduleCandidates) {
-    t.skip('staging に schedule_candidates テーブルが存在しないためスキップ');
-    return;
-  }
-
+test('schedule_candidates は提案受信者のみ更新できる', async () => {
   assert.equal(
     await rowCountAs(ids.buyer, 'UPDATE schedule_candidates SET status = $1 WHERE id = $2', ['accepted', ids.candidate]),
     1,
@@ -169,12 +137,7 @@ test('schedule_candidates は提案受信者のみ更新できる', async (t) =>
   );
 });
 
-test('item_images は認証ユーザーが閲覧でき、出品者のみ作成できる', async (t) => {
-  if (!hasItemImages) {
-    t.skip('staging に item_images テーブルが存在しないためスキップ');
-    return;
-  }
-
+test('item_images は認証ユーザーが閲覧でき、出品者のみ作成できる', async () => {
   assert.equal(await countAs(ids.buyer, 'SELECT COUNT(*) FROM item_images WHERE id = $1', [ids.itemImage]), 1);
 
   await assertAllowed(async () => {
@@ -296,15 +259,13 @@ async function seedScenario(db: PoolClient): Promise<void> {
     [ids.item, ids.seller],
   );
 
-  if (hasItemImages) {
-    await db.query(
-      `
-        INSERT INTO item_images (id, item_id, image_url, display_order)
-        VALUES ($1, $2, 'https://example.com/seed.jpg', 0)
-      `,
-      [ids.itemImage, ids.item],
-    );
-  }
+  await db.query(
+    `
+      INSERT INTO item_images (id, item_id, image_url, display_order)
+      VALUES ($1, $2, 'https://example.com/seed.jpg', 0)
+    `,
+    [ids.itemImage, ids.item],
+  );
 
   await db.query(
     `
@@ -318,35 +279,19 @@ async function seedScenario(db: PoolClient): Promise<void> {
 
   await db.query(
     `
-      INSERT INTO schedule_proposals (
-        id,
-        transaction_id,
-        sender_id,
-        ${scheduleProposalNeedsTimePlace ? 'proposed_datetime, proposed_place,' : ''}
-        status
-      )
-      VALUES (
-        $1,
-        $2,
-        $3,
-        ${scheduleProposalNeedsTimePlace ? '$4, $5,' : ''}
-        'pending'
-      )
+      INSERT INTO schedule_proposals (id, transaction_id, sender_id, status)
+      VALUES ($1, $2, $3, 'pending')
     `,
-    scheduleProposalNeedsTimePlace
-      ? [ids.proposal, ids.transaction, ids.seller, '2026-05-22T12:15:00+09:00', '豊中キャンパス 総合図書館前']
-      : [ids.proposal, ids.transaction, ids.seller],
+    [ids.proposal, ids.transaction, ids.seller],
   );
 
-  if (hasScheduleCandidates) {
-    await db.query(
-      `
-        INSERT INTO schedule_candidates (id, proposal_id, proposed_datetime, proposed_place, status)
-        VALUES ($1, $2, '2026-05-22T12:15:00+09:00', '豊中キャンパス 総合図書館前', 'pending')
-      `,
-      [ids.candidate, ids.proposal],
-    );
-  }
+  await db.query(
+    `
+      INSERT INTO schedule_candidates (id, proposal_id, proposed_datetime, proposed_place, status)
+      VALUES ($1, $2, '2026-05-22T12:15:00+09:00', '豊中キャンパス 総合図書館前', 'pending')
+    `,
+    [ids.candidate, ids.proposal],
+  );
 }
 
 async function countAs(userId: string, sql: string, params: unknown[] = []): Promise<number> {
@@ -357,34 +302,6 @@ async function countAs(userId: string, sql: string, params: unknown[] = []): Pro
 async function rowCountAs(userId: string, sql: string, params: unknown[] = []): Promise<number> {
   const result = await execAs(userId, sql, params);
   return result.rowCount ?? 0;
-}
-
-async function tableExists(db: PoolClient, tableName: string): Promise<boolean> {
-  const result = await db.query<{ exists: boolean }>(
-    `
-      SELECT to_regclass($1) IS NOT NULL AS exists
-    `,
-    [`public.${tableName}`],
-  );
-
-  return Boolean(result.rows[0]?.exists);
-}
-
-async function columnExists(db: PoolClient, tableName: string, columnName: string): Promise<boolean> {
-  const result = await db.query<{ exists: boolean }>(
-    `
-      SELECT EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = $1
-          AND column_name = $2
-      ) AS exists
-    `,
-    [tableName, columnName],
-  );
-
-  return Boolean(result.rows[0]?.exists);
 }
 
 async function execAs<T extends Record<string, unknown> = Record<string, unknown>>(
