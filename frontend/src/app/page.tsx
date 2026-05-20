@@ -40,11 +40,16 @@ export default function Home() {
         <div className="divide-y divide-slate-100">
           {items.map((book) => (
             <Link href={`/items/${book.id}`} key={book.id} className="flex gap-3 py-4 hover:bg-slate-50 transition-colors">
-              <div className="h-[92px] w-[66px] shrink-0 rounded border border-slate-200 bg-gradient-to-br from-slate-100 via-white to-blue-100 shadow-sm relative">
+              <div className="h-[92px] w-[66px] shrink-0 rounded border border-slate-200 bg-gradient-to-br from-slate-100 via-white to-blue-100 shadow-sm relative overflow-hidden">
                 {book.status !== "available" && (
-                  <div className="absolute inset-0 bg-black/50 grid place-items-center rounded text-white font-bold text-xs rotate-[-15deg]">
-                    SOLD
-                  </div>
+                  <>
+                    {/* dim overlay */}
+                    <div className="absolute inset-0 bg-white/40 rounded" />
+                    {/* diagonal red ribbon */}
+                    <div className="absolute -left-6 -bottom-1 w-24 h-7 bg-red-600 flex items-center justify-center rotate-[-40deg] shadow">
+                      <span className="text-[10px] font-black tracking-widest text-white">SOLD</span>
+                    </div>
+                  </>
                 )}
               </div>
               <div className="min-w-0 flex-1">

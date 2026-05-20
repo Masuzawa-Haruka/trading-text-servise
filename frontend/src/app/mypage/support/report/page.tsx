@@ -6,27 +6,27 @@ import { mockStore, MockTransaction, MockItem } from "@/lib/mockStore";
 
 type ReportType = {
   id: string;
-  icon: string;
   title: string;
   description: string;
 };
 
 const REPORT_TYPES: ReportType[] = [
-  { id: "user_behavior", icon: "👤", title: "不適切なユーザー行為", description: "暴言・ハラスメント・脅迫など" },
-  { id: "fake_item", icon: "✉️", title: "虚偽の出品・情報", description: "実際と異なる商品情報・価格など" },
-  { id: "fraud", icon: "💵", title: "詐欺・金銭トラブル", description: "代金未払い・商品未受け取りなど" },
-  { id: "cancel", icon: "📅", title: "ドタキャン・無断キャンセル", description: "約束を守らない行為" },
-  { id: "other", icon: "🚫", title: "その他の違反行為", description: "上記以外の不適切な行為" },
+  { id: "user_behavior", title: "不適切なユーザー行為", description: "暴言・ハラスメント・脅迫など" },
+  { id: "fake_item", title: "虚偽の出品・情報", description: "実際と異なる商品情報・価格など" },
+  { id: "fraud", title: "詐欺・金銭トラブル", description: "代金未払い・商品未受け取りなど" },
+  { id: "cancel", title: "ドタキャン・無断キャンセル", description: "約束を守らない行為" },
+  { id: "other", title: "その他の違反行為", description: "上記以外の不適切な行為" },
 ];
 
 export default function ReportPage() {
   const router = useRouter();
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedType, setSelectedType] = useState<ReportType | null>(null);
   const [targetUser, setTargetUser] = useState("");
   const [transactionItem, setTransactionItem] = useState("");
   const [details, setDetails] = useState("");
   const [userTransactions, setUserTransactions] = useState<{tx: MockTransaction, item: MockItem}[]>([]);
+  const [relatedUsers, setRelatedUsers] = useState<{ id: string; nickname: string }[]>([]);
 
   useEffect(() => {
     const user = mockStore.currentUser;
@@ -39,6 +39,19 @@ export default function ReportPage() {
     }).filter(t => t.item); // Ensure item exists
     
     setUserTransactions(txsWithItems);
+
+    // Get unique related users
+    const usersMap = new Map<string, string>();
+    relevantTxs.forEach(tx => {
+      const counterpartyId = tx.buyerId === user.id ? tx.sellerId : tx.buyerId;
+      const counterparty = mockStore.getUser(counterpartyId);
+      if (counterparty) {
+        usersMap.set(counterparty.id, counterparty.nickname);
+      }
+    });
+
+    const uniqueUsers = Array.from(usersMap.entries()).map(([id, nickname]) => ({ id, nickname }));
+    setRelatedUsers(uniqueUsers);
   }, []);
 
   const handleNext = () => {
@@ -49,11 +62,30 @@ export default function ReportPage() {
     setStep(2);
   };
 
-  const handleSubmit = () => {
+  const handleGoToConfirm = () => {
     if (!targetUser || !details) {
       alert("対象ユーザーと詳細内容は必須です");
       return;
     }
+    setStep(3);
+  };
+
+  const handleTransactionChange = (txId: string) => {
+    setTransactionItem(txId);
+    if (txId) {
+      const tx = userTransactions.find(t => t.tx.id === txId)?.tx;
+      if (tx) {
+        const user = mockStore.currentUser;
+        const counterpartyId = tx.buyerId === user.id ? tx.sellerId : tx.buyerId;
+        const counterparty = mockStore.getUser(counterpartyId);
+        if (counterparty) {
+          setTargetUser(counterparty.nickname); // Auto-fill target user
+        }
+      }
+    }
+  };
+
+  const handleSubmit = () => {
     alert("通報を受け付けました");
     router.push("/mypage/support");
   };
@@ -61,7 +93,11 @@ export default function ReportPage() {
   return (
     <main className="mx-auto min-h-dvh max-w-[430px] bg-white pb-24 text-slate-900">
       <header className="sticky top-0 z-10 flex items-center border-b border-slate-100 bg-white px-4 py-4 shadow-sm">
-        <button onClick={() => step === 2 ? setStep(1) : router.back()} className="text-xl font-bold text-slate-700">
+        <button onClick={() => {
+          if (step === 3) setStep(2);
+          else if (step === 2) setStep(1);
+          else router.back();
+        }} className="text-xl font-bold text-slate-700">
           &lt;
         </button>
         <h1 className="flex-1 text-center text-base font-black pr-4">通報する</h1>
@@ -73,24 +109,24 @@ export default function ReportPage() {
           <div className="absolute top-3 left-6 right-6 h-0.5 bg-slate-200 -z-10"></div>
           
           <div className="flex flex-col items-center">
-            <div className={`grid size-6 place-items-center rounded-full text-xs font-bold text-white mb-2 ${step === 2 ? 'bg-green-500' : 'bg-blue-600'}`}>
-              {step === 2 ? '✓' : '1'}
+            <div className={`grid size-6 place-items-center rounded-full text-xs font-bold text-white mb-2 ${step > 1 ? 'bg-green-500' : 'bg-blue-600'}`}>
+              {step > 1 ? '✓' : '1'}
             </div>
             <span className={`text-[10px] ${step === 1 ? 'font-bold text-slate-900' : 'text-slate-500'}`}>通報内容の選択</span>
           </div>
 
           <div className="flex flex-col items-center">
-            <div className={`grid size-6 place-items-center rounded-full text-xs font-bold text-white mb-2 ${step === 2 ? 'bg-blue-600' : 'bg-slate-300'}`}>
-              2
+            <div className={`grid size-6 place-items-center rounded-full text-xs font-bold text-white mb-2 ${step === 3 ? 'bg-green-500' : step === 2 ? 'bg-blue-600' : 'bg-slate-300'}`}>
+              {step === 3 ? '✓' : '2'}
             </div>
             <span className={`text-[10px] ${step === 2 ? 'font-bold text-slate-900' : 'text-slate-400'}`}>詳細の入力</span>
           </div>
 
           <div className="flex flex-col items-center">
-            <div className="grid size-6 place-items-center rounded-full bg-slate-300 text-xs font-bold text-white mb-2">
+            <div className={`grid size-6 place-items-center rounded-full text-xs font-bold text-white mb-2 ${step === 3 ? 'bg-blue-600' : 'bg-slate-300'}`}>
               3
             </div>
-            <span className="text-[10px] text-slate-400">確認</span>
+            <span className={`text-[10px] ${step === 3 ? 'font-bold text-slate-900' : 'text-slate-400'}`}>確認</span>
           </div>
         </div>
       </div>
@@ -119,7 +155,6 @@ export default function ReportPage() {
                 <div className={`grid size-5 place-items-center rounded-full border ${selectedType?.id === type.id ? 'bg-blue-500 border-blue-500 text-white' : 'border-slate-300 bg-white'}`}>
                   {selectedType?.id === type.id && <span className="text-[10px]">✓</span>}
                 </div>
-                <div className="text-xl opacity-70 w-6 text-center">{type.icon}</div>
                 <div className="flex-1">
                   <div className="text-sm font-bold text-slate-900">{type.title}</div>
                   <div className="text-[10px] text-slate-500">{type.description}</div>
@@ -155,7 +190,6 @@ export default function ReportPage() {
           <div className="mb-6">
             <h3 className="text-sm font-bold text-slate-700 mb-2">通報内容</h3>
             <div className="flex items-center gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50">
-              <div className="text-2xl opacity-70 w-8 text-center">{selectedType?.icon}</div>
               <div className="flex-1">
                 <div className="text-sm font-bold text-slate-900">{selectedType?.title}</div>
                 <div className="text-xs text-slate-500">{selectedType?.description}</div>
@@ -171,14 +205,17 @@ export default function ReportPage() {
               <label className="mb-1 block text-sm font-bold text-slate-700">
                 対象ユーザー <span className="rounded bg-red-100 px-1 text-[10px] text-red-500">必須</span>
               </label>
-              <input
-                type="text"
+              <select
                 value={targetUser}
                 onChange={(e) => setTargetUser(e.target.value)}
-                placeholder="ユーザー名を入力"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none"
-              />
-              <p className="mt-1 text-[10px] text-slate-500">※ユーザーのプロフィールや取引画面からも通報できます</p>
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+              >
+                <option value="">対象ユーザーを選択</option>
+                {relatedUsers.map((u) => (
+                  <option key={u.id} value={u.nickname}>{u.nickname}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-[10px] text-slate-500">※同じ期間（提案中および取引終了後1週間以内）に関連したユーザーが表示されます</p>
             </div>
 
             <div>
@@ -187,7 +224,7 @@ export default function ReportPage() {
               </label>
               <select
                 value={transactionItem}
-                onChange={(e) => setTransactionItem(e.target.value)}
+                onChange={(e) => handleTransactionChange(e.target.value)}
                 className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
               >
                 <option value="">取引を選択</option>
@@ -229,7 +266,7 @@ export default function ReportPage() {
             </div>
 
             <button
-              onClick={handleSubmit}
+              onClick={handleGoToConfirm}
               className="w-full rounded bg-[#0047c7] py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-700 mt-2"
             >
               確認画面へ
@@ -242,6 +279,66 @@ export default function ReportPage() {
             </h4>
             <p className="text-xs leading-relaxed text-orange-800">
               皆さまが安心して利用できるサービスにするため、通報へのご協力をお願いいたします。
+            </p>
+          </div>
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="px-4 py-6">
+          <h2 className="text-lg font-bold text-slate-900 mb-6 text-center">入力内容の確認</h2>
+          
+          <div className="space-y-6">
+            <div className="border-b border-slate-100 pb-3">
+              <h3 className="text-xs font-bold text-slate-500 mb-1">通報内容</h3>
+              <p className="text-sm font-bold text-slate-900">{selectedType?.title}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{selectedType?.description}</p>
+            </div>
+
+            <div className="border-b border-slate-100 pb-3">
+              <h3 className="text-xs font-bold text-slate-500 mb-1">対象ユーザー</h3>
+              <p className="text-sm font-bold text-slate-900">{targetUser}</p>
+            </div>
+
+            <div className="border-b border-slate-100 pb-3">
+              <h3 className="text-xs font-bold text-slate-500 mb-1">取引する教科書</h3>
+              <p className="text-sm font-bold text-slate-900">
+                {transactionItem ? (userTransactions.find(t => t.tx.id === transactionItem)?.item.title || "選択された取引") : "なし"}
+              </p>
+            </div>
+
+            <div className="border-b border-slate-100 pb-3">
+              <h3 className="text-xs font-bold text-slate-500 mb-1">詳細内容</h3>
+              <p className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">{details}</p>
+            </div>
+
+            <div className="border-b border-slate-100 pb-3">
+              <h3 className="text-xs font-bold text-slate-500 mb-1">証拠画像</h3>
+              <p className="text-sm text-slate-400">添付なし</p>
+            </div>
+
+            <div className="pt-4 flex gap-3">
+              <button
+                onClick={() => setStep(2)}
+                className="flex-1 rounded border border-slate-300 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              >
+                戻って修正する
+              </button>
+              <button
+                onClick={handleSubmit}
+                className="flex-1 rounded bg-[#0047c7] py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
+              >
+                送信する
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-8 rounded-lg bg-orange-50 p-4 border border-orange-100 text-orange-900">
+            <h4 className="text-sm font-bold mb-2 flex items-center gap-2">
+              <span className="text-orange-500">🔒</span> 送信前の注意
+            </h4>
+            <p className="text-xs leading-relaxed text-orange-800">
+              送信すると運営に通報データが送られます。嫌がらせ目的の通報や虚偽報告は、アカウントの制限対象になる場合がありますのでご注意ください。
             </p>
           </div>
         </div>

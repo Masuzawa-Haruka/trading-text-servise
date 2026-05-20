@@ -70,50 +70,32 @@ export default function PushNotificationSettingsPage() {
         
         <div className="divide-y divide-slate-100 px-4">
           <div className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-3">
-              <span className="text-xl opacity-70">🤝</span>
-              <span className="text-sm font-bold text-slate-900">新しい取引開始</span>
-            </div>
+            <span className="text-sm font-bold text-slate-900">新しい取引開始</span>
             <ToggleSwitch checked={settings.newTransaction} onChange={() => handleToggle("newTransaction")} />
           </div>
 
           <div className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-3">
-              <span className="text-xl opacity-70">📅</span>
-              <span className="text-sm font-bold text-slate-900">日時候補が届いた</span>
-            </div>
+            <span className="text-sm font-bold text-slate-900">日時候補が届いた</span>
             <ToggleSwitch checked={settings.scheduleProposal} onChange={() => handleToggle("scheduleProposal")} />
           </div>
 
           <div className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-3">
-              <span className="text-xl opacity-70">☑️</span>
-              <span className="text-sm font-bold text-slate-900">日時が確定した</span>
-            </div>
+            <span className="text-sm font-bold text-slate-900">日時が確定した</span>
             <ToggleSwitch checked={settings.scheduleConfirmed} onChange={() => handleToggle("scheduleConfirmed")} />
           </div>
 
           <div className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-3">
-              <span className="text-xl opacity-70">🔔</span>
-              <span className="text-sm font-bold text-slate-900">当日リマインド（受け渡し前）</span>
-            </div>
+            <span className="text-sm font-bold text-slate-900">当日リマインド（受け渡し前）</span>
             <ToggleSwitch checked={settings.dayOfReminder} onChange={() => handleToggle("dayOfReminder")} />
           </div>
 
           <div className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-3">
-              <span className="text-xl opacity-70">⭐️</span>
-              <span className="text-sm font-bold text-slate-900">相手から評価された</span>
-            </div>
+            <span className="text-sm font-bold text-slate-900">相手から評価された</span>
             <ToggleSwitch checked={settings.evaluated} onChange={() => handleToggle("evaluated")} />
           </div>
 
           <div className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-3">
-              <span className="text-xl opacity-70 text-red-500">❗</span>
-              <span className="text-sm font-bold text-slate-900">キャンセル通知</span>
-            </div>
+            <span className="text-sm font-bold text-slate-900">キャンセル通知</span>
             <ToggleSwitch checked={settings.cancellation} onChange={() => handleToggle("cancellation")} />
           </div>
         </div>
