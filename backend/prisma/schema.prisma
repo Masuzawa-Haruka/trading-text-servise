@@ -95,18 +95,32 @@ model Item {
   seller_id   String        @db.Uuid
   seller      User          @relation(fields: [seller_id], references: [id])
   title       String
+  author      String?       // 著者名（任意）
   description String?
   condition   ItemCondition @default(new)
   category    String?
   price       Int           @default(0)
-  image_url   String?
   status      ItemStatus    @default(available)
   created_at  DateTime      @default(now())
   updated_at  DateTime      @updatedAt
 
+  images       ItemImage[]
   transactions Transaction[]
 
   @@map("items")
+}
+
+/// 参考書の画像（1出品につき最大5枚）
+/// display_order: 0 が先頭（メイン画像）
+model ItemImage {
+  id            String   @id @default(uuid()) @db.Uuid
+  item_id       String   @db.Uuid
+  item          Item     @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  image_url     String
+  display_order Int      @default(0)
+  created_at    DateTime @default(now())
+
+  @@map("item_images")
 }
 
 model Transaction {
@@ -136,19 +150,60 @@ model Transaction {
 }
 
 model ScheduleProposal {
-  id                String         @id @default(uuid()) @db.Uuid
-  transaction_id    String         @db.Uuid
-  transaction       Transaction    @relation(fields: [transaction_id], references: [id])
-  sender_id         String         @db.Uuid
-  sender            User           @relation("SenderProposals", fields: [sender_id], references: [id])
-  proposed_datetime DateTime
-  proposed_place    String
-  status            ProposalStatus @default(pending)
-  created_at        DateTime       @default(now())
-  updated_at        DateTime       @updatedAt
+  id                String              @id @default(uuid()) @db.Uuid
+  transaction_id    String              @db.Uuid
+  transaction       Transaction         @relation(fields: [transaction_id], references: [id])
+  sender_id         String              @db.Uuid
+  sender            User                @relation("SenderProposals", fields: [sender_id], references: [id])
+  status            ProposalStatus      @default(pending)
+  created_at        DateTime            @default(now())
+  updated_at        DateTime            @updatedAt
+
+  candidates        ScheduleCandidate[]
 
   @@map("schedule_proposals")
 }
+
+/// 場所マスター：エリア（キャンパス単位で束ねる）
+model LocationArea {
+  id         String          @id @default(uuid()) @db.Uuid
+  campus     String          // "豊中" | "吹田" | "箕面"
+  name       String          // 例: "豊中キャンパス北部"
+  created_at DateTime        @default(now())
+  updated_at DateTime        @updatedAt
+
+  spots      LocationSpot[]
+
+  @@map("location_areas")
+}
+
+/// 場所マスター：スポット（エリア内の具体的な待ち合わせポイント）
+model LocationSpot {
+  id                  String       @id @default(uuid()) @db.Uuid
+  area_id             String       @db.Uuid
+  area                LocationArea @relation(fields: [area_id], references: [id], onDelete: Cascade)
+  name                String       // 例: "図書館前 時計台"
+  reference_image_url String?      // すれ違い防止用の参考画像URL
+  created_at          DateTime     @default(now())
+  updated_at          DateTime     @updatedAt
+
+  @@map("location_spots")
+}
+
+/// 日程提案スロット（ScheduleProposal 1件につき最大5スロット）
+model ScheduleCandidate {
+  id                  String           @id @default(uuid()) @db.Uuid
+  proposal_id         String           @db.Uuid
+  proposal            ScheduleProposal @relation(fields: [proposal_id], references: [id], onDelete: Cascade)
+  proposed_datetime   DateTime
+  proposed_place      String           // 将来的に location_spot_id FK へ移行予定
+  status              ProposalStatus   @default(pending)
+  created_at          DateTime         @default(now())
+  updated_at          DateTime         @updatedAt
+
+  @@map("schedule_candidates")
+}
+
 
 /// 価格交渉オファーモデル（Take it or Leave it 方式 ・ 最大3回）
 model PriceOffer {

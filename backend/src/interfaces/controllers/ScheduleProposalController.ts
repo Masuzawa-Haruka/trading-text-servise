@@ -102,15 +102,19 @@ export class ScheduleProposalController {
         return;
       }
 
-      const { status } = req.body;
+      const { status, candidate_id } = req.body;
       if (status !== 'accepted' && status !== 'rejected') {
         res.status(400).json({ error: 'ステータスは accepted または rejected を指定してください' });
+        return;
+      }
+      if (status === 'accepted' && (typeof candidate_id !== 'string' || candidate_id.trim() === '')) {
+        res.status(400).json({ error: '承認する場合は candidate_id を指定してください' });
         return;
       }
 
       const updated = await this.respondScheduleProposalUseCase.execute(
         proposalId,
-        { status },
+        { status, candidate_id },
         req.user.id
       );
 

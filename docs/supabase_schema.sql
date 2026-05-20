@@ -35,14 +35,23 @@ CREATE TABLE items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     seller_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR NOT NULL,
+    author VARCHAR,
     description TEXT,
     condition "ItemCondition" DEFAULT 'new',
     category VARCHAR,
     price INT DEFAULT 0,
-    image_url VARCHAR,
     status "ItemStatus" DEFAULT 'available',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2.1 Item Images
+CREATE TABLE item_images (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    item_id UUID NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    image_url VARCHAR NOT NULL,
+    display_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 3. Transactions
@@ -66,12 +75,22 @@ CREATE TABLE schedule_proposals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     transaction_id UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
     sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status "ProposalStatus" DEFAULT 'pending',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4.1 Schedule Candidates
+CREATE TABLE schedule_candidates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    proposal_id UUID NOT NULL REFERENCES schedule_proposals(id) ON DELETE CASCADE,
     proposed_datetime TIMESTAMPTZ NOT NULL,
     proposed_place VARCHAR NOT NULL,
     status "ProposalStatus" DEFAULT 'pending',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
 
 -- 5. Price Offers（価格交渉: Take it or Leave it 方式 / 最大3回）
 CREATE TABLE price_offers (
@@ -132,6 +151,25 @@ CREATE TABLE cancellation_requests (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 11. Location Areas (Campus / Area master)
+CREATE TABLE location_areas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    campus VARCHAR NOT NULL,
+    name VARCHAR NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 12. Location Spots (Specific spot master)
+CREATE TABLE location_spots (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    area_id UUID NOT NULL REFERENCES location_areas(id) ON DELETE CASCADE,
+    name VARCHAR NOT NULL,
+    reference_image_url VARCHAR,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ==========================================
 -- RLS (Row Level Security) Policies
 -- ==========================================
@@ -139,13 +177,18 @@ CREATE TABLE cancellation_requests (
 -- Enable RLS on all tables
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE item_images ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE schedule_proposals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE schedule_candidates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE price_offers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evaluations ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cancellation_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE location_areas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE location_spots ENABLE ROW LEVEL SECURITY;
 
 -- ------------------------------------------
 -- 1. Users
@@ -288,6 +331,39 @@ WITH CHECK (
     )
 );
 
+-- ------------------------------------------
+-- 10. Item Images
+-- 誰でも閲覧可能
+CREATE POLICY "Users can view all item images" ON item_images FOR SELECT USING (auth.role() = 'authenticated');
+-- 出品者のみ画像を追加・編集可能
+CREATE POLICY "Sellers can manage item images" ON item_images FOR ALL
+USING (
+    EXISTS (
+        SELECT 1 FROM items i
+        WHERE i.id = item_images.item_id
+        AND i.seller_id = auth.uid()
+    )
+);
+
+-- ------------------------------------------
+-- 11. Schedule Candidates
+-- 取引の当事者のみ閲覧可能
+CREATE POLICY "Parties can view schedule candidates" ON schedule_candidates FOR SELECT
+USING (
+    EXISTS (
+        SELECT 1 FROM schedule_proposals p
+        JOIN transactions t ON t.id = p.transaction_id
+        WHERE p.id = schedule_candidates.proposal_id
+        AND (t.seller_id = auth.uid() OR t.buyer_id = auth.uid())
+    )
+);
+
+-- ------------------------------------------
+-- 12. Location Areas & Spots
+-- 誰でも場所マスターを閲覧可能
+CREATE POLICY "Users can view location areas" ON location_areas FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Users can view location spots" ON location_spots FOR SELECT USING (auth.role() = 'authenticated');
+
 -- ==========================================
 -- Triggers for updated_at
 -- ==========================================
@@ -303,10 +379,13 @@ CREATE TRIGGER update_users_modtime BEFORE UPDATE ON users FOR EACH ROW EXECUTE 
 CREATE TRIGGER update_items_modtime BEFORE UPDATE ON items FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_transactions_modtime BEFORE UPDATE ON transactions FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_schedule_proposals_modtime BEFORE UPDATE ON schedule_proposals FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+CREATE TRIGGER update_schedule_candidates_modtime BEFORE UPDATE ON schedule_candidates FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_price_offers_modtime BEFORE UPDATE ON price_offers FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_evaluations_modtime BEFORE UPDATE ON evaluations FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_notifications_modtime BEFORE UPDATE ON notifications FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_cancellation_requests_modtime BEFORE UPDATE ON cancellation_requests FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+CREATE TRIGGER update_location_areas_modtime BEFORE UPDATE ON location_areas FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+CREATE TRIGGER update_location_spots_modtime BEFORE UPDATE ON location_spots FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 
 -- ==========================================
 -- Auth Trigger (Auto-create public.users)
@@ -327,3 +406,4 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+

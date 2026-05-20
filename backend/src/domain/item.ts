@@ -4,6 +4,8 @@
  * このファイルはデータベースや外部フレームワークに依存しない、
  * アプリケーションの「出品」という概念をTypeScriptの型として表現する。
  */
+import { ItemImageEntity } from './item_image';
+export { ItemImageEntity };
 
 /** 出品のステータス。仕様書 5.1 の状態定義に対応する */
 export type ItemStatus = 'available' | 'matching' | 'completed' | 'canceled';
@@ -26,12 +28,13 @@ export interface ItemEntity {
   id: string;
   seller_id: string;          // 出品者のユーザーID
   title: string;              // 参考書のタイトル
+  author: string | null;      // 著者名（任意）
   description: string | null; // 詳細説明（任意）
   condition: ItemCondition;   // コンディション
   category: string | null;    // 科目カテゴリ（任意・検索用）
   price: number;              // 価格（0円推奨）
-  image_url: string | null;   // 表紙画像のURL（フロントエンドからアップロード済みURLを受け取る）
   status: ItemStatus;         // 出品のステータス
+  images: ItemImageEntity[];  // 画像一覧（display_order 順）
   created_at: Date;
   updated_at: Date;
 }
@@ -43,11 +46,13 @@ export interface ItemEntity {
 export interface CreateItemInput {
   seller_id: string;
   title: string;
+  author?: string;
   description?: string;
   condition: ItemCondition;
   category?: string;
   price?: number;
-  image_url?: string;
+  /** Supabase Storageへのアップロード済みURL。先頭がメイン画像（display_order=0）。最大5枚。 */
+  image_urls?: string[];
 }
 
 /**
