@@ -19,6 +19,7 @@ import {
   VALID_ITEM_CONDITIONS,
 } from '../../domain/item';
 import { NotFoundError, ForbiddenError, ValidationError } from '../../domain/errors';
+import { INT32_MAX } from '../../lib/validation';
 
 export class ItemController {
   // 各ユースケースをコンストラクタで受け取ることで、依存性の注入（DI）を実現する
@@ -94,11 +95,34 @@ export class ItemController {
         return;
       }
 
+      if (typeof req.body !== 'object' || req.body === null || Array.isArray(req.body)) {
+        res.status(400).json({ error: 'リクエストボディはオブジェクトで指定してください' });
+        return;
+      }
+
       const { title, author, description, condition, category, price, image_urls } = req.body;
 
       // title: 非空文字列であることを検証
       if (typeof title !== 'string' || title.trim() === '') {
         res.status(400).json({ error: 'title は空でない文字列で指定してください' });
+        return;
+      }
+
+      const normalizedAuthor = normalizeOptionalString(author);
+      if (normalizedAuthor === false) {
+        res.status(400).json({ error: 'author は文字列で指定してください' });
+        return;
+      }
+
+      const normalizedDescription = normalizeOptionalString(description);
+      if (normalizedDescription === false) {
+        res.status(400).json({ error: 'description は文字列で指定してください' });
+        return;
+      }
+
+      const normalizedCategory = normalizeOptionalString(category);
+      if (normalizedCategory === false) {
+        res.status(400).json({ error: 'category は文字列で指定してください' });
         return;
       }
 
@@ -110,7 +134,21 @@ export class ItemController {
         return;
       }
 
-      // image_urls: 配列かつ最大5枚であることを検証
+      if (
+        price !== undefined &&
+        (typeof price !== 'number' ||
+          !Number.isInteger(price) ||
+          price < 0 ||
+          price > INT32_MAX)
+      ) {
+        res.status(400).json({
+          error: `price は 0 以上 ${INT32_MAX} 以下の整数で指定してください`,
+        });
+        return;
+      }
+
+      let normalizedImageUrls: string[] | undefined;
+      // image_urls: 文字列配列かつ最大5枚、各URLは空でない文字列であることを検証
       if (image_urls !== undefined) {
         if (!Array.isArray(image_urls)) {
           res.status(400).json({ error: 'image_urls は文字列の配列で指定してください' });
@@ -120,17 +158,22 @@ export class ItemController {
           res.status(400).json({ error: '画像は最大5枚まで登録できます' });
           return;
         }
+        if (image_urls.some((url) => typeof url !== 'string' || url.trim() === '')) {
+          res.status(400).json({ error: 'image_urls の各要素は空でない文字列で指定してください' });
+          return;
+        }
+        normalizedImageUrls = image_urls.map((url) => url.trim());
       }
 
       const item = await this.createItemUseCase.execute({
         seller_id: req.user.id, // 認証情報からseller_idを自動セット（クライアントから受け取らない）
         title: title.trim(),
-        author,
-        description,
+        author: normalizedAuthor,
+        description: normalizedDescription,
         condition,
-        category,
+        category: normalizedCategory,
         price,
-        image_urls,
+        image_urls: normalizedImageUrls,
       });
       res.status(201).json(item);
     } catch (error) {
@@ -186,4 +229,16 @@ export class ItemController {
       }
     }
   };
+}
+
+function normalizeOptionalString(value: unknown): string | undefined | false {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  return trimmed === '' ? undefined : trimmed;
 }

@@ -7,7 +7,7 @@
 import { prisma } from '../../lib/prisma';
 import { ICancellationRepository } from '../../domain/repositories/ICancellationRepository';
 import { CancellationRequestEntity, CancellationStatus } from '../../domain/cancellation';
-import { CancellationRequest } from '@prisma/client';
+import { CancellationRequest, Prisma } from '@prisma/client';
 
 export class CancellationRepository implements ICancellationRepository {
   async findById(id: string): Promise<CancellationRequestEntity | null> {
@@ -76,8 +76,11 @@ export class CancellationRepository implements ICancellationRepository {
             status: 'accepted', // 'accepted' = 即時実行済み
           },
         });
-      } catch {
-        throw new Error('ALREADY_CANCELED');
+      } catch (error) {
+        if (isUniqueConstraintError(error)) {
+          throw new Error('ALREADY_CANCELED');
+        }
+        throw error;
       }
 
       // 4. ペナルティ評価ログを作成（cancel: -10点）
@@ -162,4 +165,8 @@ export class CancellationRepository implements ICancellationRepository {
       status: r.status as CancellationStatus,
     };
   }
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }

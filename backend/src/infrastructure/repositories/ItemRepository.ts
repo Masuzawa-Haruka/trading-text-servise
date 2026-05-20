@@ -18,7 +18,8 @@ export class ItemRepository implements IItemRepository {
   /**
    * 新しい出品をDBに作成する。
    * price / author / description は任意項目のため未指定時はデフォルト値を使う。
-   * 画像は UseCase 層で create 後に別途 createImages を呼び出す。
+   * 画像を同時に保存する通常フローでは createWithImages を使う。
+   * このメソッドは画像なし作成やテスト用途の単体作成として残している。
    */
   async create(input: CreateItemInput): Promise<ItemEntity> {
     const item = await prisma.item.create({
@@ -178,4 +179,3 @@ export class ItemRepository implements IItemRepository {
     };
   }
 }
-
