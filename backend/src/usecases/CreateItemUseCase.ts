@@ -7,6 +7,7 @@
  */
 import { IItemRepository } from '../domain/repositories/IItemRepository';
 import { ItemEntity, CreateItemInput } from '../domain/item';
+import { ValidationError } from '../domain/errors';
 
 export class CreateItemUseCase {
   constructor(private readonly itemRepository: IItemRepository) {}
@@ -20,9 +21,9 @@ export class CreateItemUseCase {
   async execute(input: CreateItemInput): Promise<ItemEntity> {
     const { image_urls, ...itemInput } = input;
 
-    // 最大5枚バリデーション
+    // 最大5枚バリデーション（domain/errors.ts の方針に従い ValidationError を使用）
     if (image_urls && image_urls.length > 5) {
-      throw new Error('画像は最大5枚まで登録できます');
+      throw new ValidationError('画像は最大5枚まで登録できます');
     }
 
     // Item レコードを作成（この時点で images は空配列）

@@ -33,9 +33,10 @@ export class ScheduleProposalRepository implements IScheduleProposalRepository {
       const pendingIds = pendingProposals.map(p => p.id);
 
       if (pendingIds.length > 0) {
-        // 親提案を却下
+        // 親提案を却下（楽観ロック: status: 'pending' のものだけ対象にすることで
+        // findMany と updateMany の間に別 tx で状態が変わったレコードへの誤上書きを防ぐ）
         await tx.scheduleProposal.updateMany({
-          where: { id: { in: pendingIds } },
+          where: { id: { in: pendingIds }, status: 'pending' },
           data: { status: 'rejected' },
         });
 
@@ -156,9 +157,10 @@ export class ScheduleProposalRepository implements IScheduleProposalRepository {
 
       const otherProposalIds = otherProposals.map(p => p.id);
       if (otherProposalIds.length > 0) {
-        // 親提案を却下
+        // 親提案を却下（楽観ロック: findMany 後に別 tx で accepted/rejected に変わった
+        // 提案を誤上書きしないよう status: 'pending' を条件に加える）
         await tx.scheduleProposal.updateMany({
-          where: { id: { in: otherProposalIds } },
+          where: { id: { in: otherProposalIds }, status: 'pending' },
           data: { status: 'rejected' },
         });
 

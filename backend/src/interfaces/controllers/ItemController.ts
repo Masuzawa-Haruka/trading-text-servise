@@ -18,7 +18,7 @@ import {
   VALID_ITEM_STATUSES,
   VALID_ITEM_CONDITIONS,
 } from '../../domain/item';
-import { NotFoundError, ForbiddenError } from '../../domain/errors';
+import { NotFoundError, ForbiddenError, ValidationError } from '../../domain/errors';
 
 export class ItemController {
   // 各ユースケースをコンストラクタで受け取ることで、依存性の注入（DI）を実現する
@@ -134,8 +134,12 @@ export class ItemController {
       });
       res.status(201).json(item);
     } catch (error) {
-      if (error instanceof Error && error.message.includes('画像は最大5枚')) {
+      if (error instanceof ValidationError) {
         res.status(400).json({ error: error.message });
+      } else if (error instanceof NotFoundError) {
+        res.status(404).json({ error: error.message });
+      } else if (error instanceof ForbiddenError) {
+        res.status(403).json({ error: error.message });
       } else {
         res.status(500).json({ error: 'Internal Server Error' });
       }
