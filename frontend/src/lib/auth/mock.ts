@@ -1,18 +1,16 @@
 import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
 
 const MOCK_AUTH_REQUESTED = process.env.NEXT_PUBLIC_AUTH_MOCK_ENABLED === "true";
-const IS_PRODUCTION_LIKE =
-  process.env.NODE_ENV === "production" ||
-  process.env.VERCEL_ENV === "production" ||
-  process.env.VERCEL_ENV === "preview";
+const IS_LOCAL_DEVELOPMENT =
+  process.env.NODE_ENV === "development" && process.env.VERCEL_ENV === undefined;
 
-if (MOCK_AUTH_REQUESTED && IS_PRODUCTION_LIKE) {
+if (MOCK_AUTH_REQUESTED && !IS_LOCAL_DEVELOPMENT) {
   throw new Error(
-    "NEXT_PUBLIC_AUTH_MOCK_ENABLED はローカル開発専用です。本番・ステージング・Vercel preview では有効化できません。"
+    "NEXT_PUBLIC_AUTH_MOCK_ENABLED はローカル開発専用です。NODE_ENV=development のローカル環境以外では有効化できません。"
   );
 }
 
-export const MOCK_AUTH_ENABLED = MOCK_AUTH_REQUESTED;
+export const MOCK_AUTH_ENABLED = MOCK_AUTH_REQUESTED && IS_LOCAL_DEVELOPMENT;
 
 export const MOCK_USER_ID = "11111111-1111-4111-8111-111111111111";
 
