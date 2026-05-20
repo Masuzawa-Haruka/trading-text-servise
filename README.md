@@ -13,7 +13,7 @@ npm run dev:mock
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-`npm run dev:mock` enables `NEXT_PUBLIC_AUTH_MOCK_ENABLED=true` and uses a fixed mock Supabase user for frontend screens that need authentication. Do not set this flag in staging or production.
+`npm run dev:mock` enables `NEXT_PUBLIC_AUTH_MOCK_ENABLED=true` and uses a fixed mock Supabase user for frontend screens that need authentication. The code rejects this flag in production-like environments, and it must not be set in staging or production.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

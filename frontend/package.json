@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:mock": "NEXT_PUBLIC_AUTH_MOCK_ENABLED=true next dev",
+    "dev:mock": "node scripts/dev-mock.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

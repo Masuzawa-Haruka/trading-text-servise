@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { MOCK_AUTH_ENABLED } from "@/lib/auth/mock";
+import { getOptionalSupabaseConfig } from "@/lib/supabase/env";
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -11,16 +12,15 @@ export async function proxy(request: NextRequest) {
     return supabaseResponse;
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseConfig = getOptionalSupabaseConfig();
 
-  if (!isValidHttpUrl(supabaseUrl) || !supabaseAnonKey) {
+  if (!supabaseConfig) {
     return supabaseResponse;
   }
 
   const supabase = createServerClient(
-    supabaseUrl,
-    supabaseAnonKey,
+    supabaseConfig.url,
+    supabaseConfig.anonKey,
     {
       cookies: {
         getAll() {
@@ -59,19 +59,6 @@ export async function proxy(request: NextRequest) {
   }
 
   return supabaseResponse;
-}
-
-function isValidHttpUrl(value: string | undefined): value is string {
-  if (!value) {
-    return false;
-  }
-
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 export const config = {
