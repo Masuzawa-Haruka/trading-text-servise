@@ -403,6 +403,7 @@ async function execAs<T extends Record<string, unknown> = Record<string, unknown
     return result;
   } catch (error) {
     await client.query('ROLLBACK TO SAVEPOINT rls_test_step');
+    await client.query('RELEASE SAVEPOINT rls_test_step');
     await client.query('RESET ROLE');
     throw error;
   }
