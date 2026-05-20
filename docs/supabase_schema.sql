@@ -187,6 +187,8 @@ ALTER TABLE evaluations ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cancellation_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE location_areas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE location_spots ENABLE ROW LEVEL SECURITY;
 
 -- ------------------------------------------
 -- 1. Users

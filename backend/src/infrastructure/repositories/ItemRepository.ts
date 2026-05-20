@@ -37,6 +37,44 @@ export class ItemRepository implements IItemRepository {
   }
 
   /**
+   * 出品と画像を 1 つの prisma.$transaction で原子的に作成する。
+   * 画像作成が失敗した場合は Item 作成ごとロールバックされるため部分成功が発生しない。
+   */
+  async createWithImages(input: CreateItemInput): Promise<ItemEntity> {
+    const { image_urls, ...itemInput } = input;
+
+    return prisma.$transaction(async (tx) => {
+      const item = await tx.item.create({
+        data: {
+          seller_id: itemInput.seller_id,
+          title: itemInput.title,
+          author: itemInput.author ?? null,
+          description: itemInput.description ?? null,
+          condition: itemInput.condition,
+          category: itemInput.category ?? null,
+          price: itemInput.price ?? 0,
+        },
+      });
+
+      if (image_urls && image_urls.length > 0) {
+        await tx.itemImage.createMany({
+          data: image_urls.map((url, index) => ({
+            item_id: item.id,
+            image_url: url,
+            display_order: index,
+          })),
+        });
+      }
+
+      const itemWithImages = await tx.item.findUniqueOrThrow({
+        where: { id: item.id },
+        include: { images: { orderBy: { display_order: 'asc' } } },
+      });
+      return this.toEntity(itemWithImages);
+    });
+  }
+
+  /**
    * フィルタ条件（カテゴリ・コンディション・ステータス）に合う出品一覧を取得する。
    * status の指定がない場合は、公開中（available）のみを返す。
    * 並び順は作成日時の降順（新着順）。画像は display_order 昇順で取得する。

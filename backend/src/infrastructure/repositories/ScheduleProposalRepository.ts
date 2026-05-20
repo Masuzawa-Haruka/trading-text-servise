@@ -140,10 +140,16 @@ export class ScheduleProposalRepository implements IScheduleProposalRepository {
       });
 
       // 3. 親提案（Proposal）のステータスを accepted に更新
-      await tx.scheduleProposal.update({
-        where: { id: proposalId },
+      // updateMany + count チェックで、すでに rejected/accepted 済みの提案への
+      // 誤上書きを防ぐ（楽観ロック）
+      const proposalUpdateResult = await tx.scheduleProposal.updateMany({
+        where: { id: proposalId, transaction_id: transactionId, status: 'pending' },
         data: { status: 'accepted' },
       });
+
+      if (proposalUpdateResult.count === 0) {
+        throw new Error('ALREADY_RESPONDED');
+      }
 
       // 4. 他のすべての保留中の提案と候補を一括却下
       const otherProposals = await tx.scheduleProposal.findMany({

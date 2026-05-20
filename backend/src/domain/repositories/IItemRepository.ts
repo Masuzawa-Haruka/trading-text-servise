@@ -12,6 +12,12 @@ export interface IItemRepository {
   /** 新しい出品をDBに保存する */
   create(input: CreateItemInput): Promise<ItemEntity>;
 
+  /**
+   * 出品と画像を1つのトランザクションで原子的に作成する。
+   * image_urls が指定されていない場合は images 空配列の ItemEntity を返す。
+   */
+  createWithImages(input: CreateItemInput): Promise<ItemEntity>;
+
   /** フィルタ条件に合う出品一覧をDBから取得する（画像含む） */
   findAll(filter: GetItemsFilter): Promise<ItemEntity[]>;
 
