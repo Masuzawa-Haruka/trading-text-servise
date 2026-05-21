@@ -1,20 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { mockStore, MockItem, MockTransaction } from "@/lib/mockStore";
+import { mockStore } from "@/lib/mockStore";
+import { SignOutButton } from "@/components/SignOutButton";
 
 export default function MyPage() {
-  const [soldItems, setSoldItems] = useState<MockItem[]>([]);
-  const [boughtTxs, setBoughtTxs] = useState<MockTransaction[]>([]);
-
-  useEffect(() => {
+  const { soldItems, boughtTxs } = useMemo(() => {
     const user = mockStore.currentUser;
     const allItems = mockStore.getItems();
     const allTxs = mockStore.getTransactions();
 
-    setSoldItems(allItems.filter(i => i.sellerId === user.id));
-    setBoughtTxs(allTxs.filter(t => t.buyerId === user.id));
+    return {
+      soldItems: allItems.filter(i => i.sellerId === user.id),
+      boughtTxs: allTxs.filter(t => t.buyerId === user.id),
+    };
   }, []);
 
   return (
@@ -101,12 +101,7 @@ export default function MyPage() {
 
       {/* ログアウト */}
       <div className="mt-6 px-4">
-        <button
-          type="button"
-          className="w-full rounded bg-white py-3 text-sm font-bold text-red-500 shadow-sm border border-slate-100"
-        >
-          ログアウト
-        </button>
+        <SignOutButton />
       </div>
     </main>
   );
