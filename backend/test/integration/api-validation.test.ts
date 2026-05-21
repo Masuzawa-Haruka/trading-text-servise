@@ -50,6 +50,46 @@ test('POST /api/items rejects non-string optional fields before usecase executio
   assert.equal(called, false);
 });
 
+test('authenticateToken rejects non-Osaka University email domains', async () => {
+  const req = {
+    headers: {
+      authorization: `Bearer ${authToken({ email: 'student@example.com' })}`,
+    },
+    body: {},
+    params: {},
+  } as AuthRequest;
+  const res = createMockResponse();
+
+  let authenticated = false;
+  authenticateToken(req, res as any, () => {
+    authenticated = true;
+  });
+
+  assert.equal(authenticated, false);
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, { error: '大阪大学のメールアドレスで認証してください' });
+});
+
+test('authenticateToken accepts Supabase JWTs for Osaka University email domains', async () => {
+  const req = {
+    headers: {
+      authorization: `Bearer ${authToken({ email: 'student@osaka-u.ac.jp' })}`,
+    },
+    body: {},
+    params: {},
+  } as AuthRequest;
+  const res = createMockResponse();
+
+  let authenticated = false;
+  authenticateToken(req, res as any, () => {
+    authenticated = true;
+  });
+
+  assert.equal(authenticated, true);
+  assert.equal(req.user?.id, AUTH_USER_ID);
+  assert.equal(req.user?.email, 'student@osaka-u.ac.jp');
+});
+
 test('POST /api/items rejects invalid image_urls elements before usecase execution', async () => {
   let called = false;
   const handler = createItemHandler({
@@ -234,8 +274,16 @@ function createCancellationHandler(
   return controller.executeCancellation.bind(controller) as unknown as TestHandler;
 }
 
-function authToken(): string {
-  return jwt.sign({ sub: AUTH_USER_ID, email: 'test@example.com', role: 'authenticated' }, JWT_SECRET);
+function authToken(options: { email?: string } = {}): string {
+  return jwt.sign(
+    {
+      sub: AUTH_USER_ID,
+      email: options.email ?? 'test@osaka-u.ac.jp',
+      role: 'authenticated',
+      aud: 'authenticated',
+    },
+    JWT_SECRET,
+  );
 }
 
 type TestHandler = (req: AuthRequest, res: MockResponse) => Promise<void>;

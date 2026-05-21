@@ -226,9 +226,9 @@ async function seedScenario(db: PoolClient): Promise<void> {
       ids.seller,
       ids.buyer,
       ids.outsider,
-      `rls-seller-${runId}@example.com`,
-      `rls-buyer-${runId}@example.com`,
-      `rls-outsider-${runId}@example.com`,
+      `rls-seller-${runId}@osaka-u.ac.jp`,
+      `rls-buyer-${runId}@osaka-u.ac.jp`,
+      `rls-outsider-${runId}@osaka-u.ac.jp`,
     ],
   );
 
@@ -245,9 +245,9 @@ async function seedScenario(db: PoolClient): Promise<void> {
       ids.seller,
       ids.buyer,
       ids.outsider,
-      `rls-seller-${runId}@example.com`,
-      `rls-buyer-${runId}@example.com`,
-      `rls-outsider-${runId}@example.com`,
+      `rls-seller-${runId}@osaka-u.ac.jp`,
+      `rls-buyer-${runId}@osaka-u.ac.jp`,
+      `rls-outsider-${runId}@osaka-u.ac.jp`,
     ],
   );
 

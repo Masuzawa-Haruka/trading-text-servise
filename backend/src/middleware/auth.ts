@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
+const ALLOWED_EMAIL_DOMAIN = '@osaka-u.ac.jp';
+
 export interface AuthRequest extends Request {
   user?: {
     id: string;
@@ -27,13 +29,31 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 
   try {
     const decoded = jwt.verify(token, secret) as any;
+    const email = typeof decoded.email === 'string' ? decoded.email : undefined;
+    const userId = typeof decoded.sub === 'string' ? decoded.sub : undefined;
+    const role = typeof decoded.role === 'string' ? decoded.role : undefined;
+
+    if (!userId || role !== 'authenticated') {
+      res.status(403).json({ error: '無効なトークンです' });
+      return;
+    }
+
+    if (!isAllowedUniversityEmail(email)) {
+      res.status(403).json({ error: '大阪大学のメールアドレスで認証してください' });
+      return;
+    }
+
     req.user = {
-      id: decoded.sub as string,
-      email: decoded.email,
-      role: decoded.role,
+      id: userId,
+      email,
+      role,
     };
     next();
   } catch (error) {
     res.status(403).json({ error: '無効なトークンです' });
   }
 };
+
+export function isAllowedUniversityEmail(email: string | undefined): boolean {
+  return Boolean(email && email.toLowerCase().endsWith(ALLOWED_EMAIL_DOMAIN));
+}
