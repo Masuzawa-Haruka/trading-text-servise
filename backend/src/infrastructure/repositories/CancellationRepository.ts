@@ -10,15 +10,17 @@ import { CancellationRequestEntity, CancellationStatus } from '../../domain/canc
 import { CancellationRequest, Prisma } from '@prisma/client';
 
 export class CancellationRepository implements ICancellationRepository {
+  constructor(private readonly db: typeof prisma = prisma) {}
+
   async findById(id: string): Promise<CancellationRequestEntity | null> {
-    const request = await prisma.cancellationRequest.findUnique({
+    const request = await this.db.cancellationRequest.findUnique({
       where: { id },
     });
     return request ? this.toEntity(request) : null;
   }
 
   async findByTransactionId(transactionId: string): Promise<CancellationRequestEntity | null> {
-    const request = await prisma.cancellationRequest.findUnique({
+    const request = await this.db.cancellationRequest.findUnique({
       where: { transaction_id: transactionId },
     });
     return request ? this.toEntity(request) : null;
@@ -43,7 +45,7 @@ export class CancellationRepository implements ICancellationRepository {
     requesterId: string,
     reason?: string
   ): Promise<CancellationRequestEntity> {
-    return await prisma.$transaction(async (tx) => {
+    return await this.db.$transaction(async (tx) => {
       // 1. 取引を scheduled → canceled に更新（楽観ロック）
       const txUpdateResult = await tx.transaction.updateMany({
         where: { id: transactionId, status: 'scheduled' },
@@ -119,7 +121,7 @@ export class CancellationRepository implements ICancellationRepository {
     reporterId: string,
     targetUserId: string
   ): Promise<void> {
-    await prisma.$transaction(async (tx) => {
+    await this.db.$transaction(async (tx) => {
       // 1. 取引を scheduled → canceled に更新（楽観ロック）
       const txUpdateResult = await tx.transaction.updateMany({
         where: { id: transactionId, status: 'scheduled' },
