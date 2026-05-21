@@ -25,7 +25,7 @@ export const mockUser: User = {
   },
   aud: "authenticated",
   created_at: "2026-05-20T00:00:00.000Z",
-  email: "mock-user@example.com",
+  email: "mock-user@osaka-u.ac.jp",
   role: "authenticated",
 };
 

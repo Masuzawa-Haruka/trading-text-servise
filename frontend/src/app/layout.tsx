@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AppFooter } from "@/components/AppFooter";
+import { AppShell } from "@/components/AppShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,8 +18,7 @@ export default function RootLayout({
       className="h-full antialiased"
     >
       <body className="min-h-full bg-[#f5f7fb] text-slate-950">
-        <div className="min-h-dvh pb-[calc(4rem+env(safe-area-inset-bottom))]">{children}</div>
-        <AppFooter />
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

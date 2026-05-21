@@ -15,7 +15,13 @@ export async function proxy(request: NextRequest) {
   const supabaseConfig = getOptionalSupabaseConfig();
 
   if (!supabaseConfig) {
-    return supabaseResponse;
+    if (process.env.NODE_ENV === "development") {
+      return supabaseResponse;
+    }
+
+    return new NextResponse("Supabase authentication is not configured", {
+      status: 503,
+    });
   }
 
   const supabase = createServerClient(
