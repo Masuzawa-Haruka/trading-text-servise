@@ -15,6 +15,16 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 `npm run dev:mock` enables `NEXT_PUBLIC_AUTH_MOCK_ENABLED=true` and uses a fixed mock Supabase user for frontend screens that need authentication. The code rejects this flag in production-like environments, and it must not be set in staging or production.
 
+For real Supabase Auth integration, set these frontend variables:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
+```
+
+The backend also requires `SUPABASE_JWT_SECRET` so it can verify `Authorization: Bearer <JWT>` from the frontend API client.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
