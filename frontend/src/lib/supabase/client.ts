@@ -1,8 +1,14 @@
 import { createBrowserClient } from "@supabase/ssr";
+import { MOCK_AUTH_ENABLED, withMockAuth } from "@/lib/auth/mock";
+import { getSupabaseConfig } from "@/lib/supabase/env";
 
 export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  const { url, anonKey } = getSupabaseConfig();
+
+  const client = createBrowserClient(
+    url,
+    anonKey
   );
+
+  return MOCK_AUTH_ENABLED ? withMockAuth(client) : client;
 }
