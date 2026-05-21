@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { beforeEach, afterEach } from 'node:test';
 import jwt from 'jsonwebtoken';
-import { authenticateToken, AuthRequest } from '../../src/middleware/auth';
+import { authenticateToken, AuthRequest, extractBearerToken } from '../../src/middleware/auth';
 import { ItemController } from '../../src/interfaces/controllers/ItemController';
 import { ScheduleProposalController } from '../../src/interfaces/controllers/ScheduleProposalController';
 import { CancellationController } from '../../src/interfaces/controllers/CancellationController';
@@ -88,6 +88,17 @@ test('authenticateToken accepts Supabase JWTs for Osaka University email domains
   assert.equal(authenticated, true);
   assert.equal(req.user?.id, AUTH_USER_ID);
   assert.equal(req.user?.email, 'student@osaka-u.ac.jp');
+});
+
+test('extractBearerToken normalizes string headers and rejects malformed values', () => {
+  const token = authToken();
+
+  assert.equal(extractBearerToken(`Bearer ${token}`), token);
+  assert.equal(extractBearerToken([`Bearer ${token}`]), token);
+  assert.equal(extractBearerToken('Basic abc'), undefined);
+  assert.equal(extractBearerToken('Bearer'), undefined);
+  assert.equal(extractBearerToken('Bearer a b'), undefined);
+  assert.equal(extractBearerToken(undefined), undefined);
 });
 
 test('POST /api/items rejects invalid image_urls elements before usecase execution', async () => {

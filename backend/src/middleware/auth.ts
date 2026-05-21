@@ -12,8 +12,7 @@ export interface AuthRequest extends Request {
 }
 
 export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const token = extractBearerToken(req.headers.authorization);
 
   if (!token) {
     res.status(401).json({ error: '認証トークンが必要です' });
@@ -56,4 +55,19 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 
 export function isAllowedUniversityEmail(email: string | undefined): boolean {
   return Boolean(email && email.toLowerCase().endsWith(ALLOWED_EMAIL_DOMAIN));
+}
+
+export function extractBearerToken(authHeader: string | string[] | undefined): string | undefined {
+  const header = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+
+  if (typeof header !== 'string') {
+    return undefined;
+  }
+
+  const [scheme, token, ...extra] = header.trim().split(/\s+/);
+  if (scheme !== 'Bearer' || !token || extra.length > 0) {
+    return undefined;
+  }
+
+  return token;
 }

@@ -21,7 +21,7 @@ CREATE TYPE "NotificationType" AS ENUM ('action_required', 'info');
 -- 1. Users
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR UNIQUE NOT NULL CHECK (lower(email) LIKE '%@osaka-u.ac.jp'),
+    email VARCHAR UNIQUE NOT NULL CONSTRAINT users_email_osaka_domain CHECK (lower(email) LIKE '%@osaka-u.ac.jp'),
     nickname VARCHAR NOT NULL,
     profile_image_url VARCHAR,
     credit_score INT DEFAULT 100,
