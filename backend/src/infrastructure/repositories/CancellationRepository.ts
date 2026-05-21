@@ -45,15 +45,12 @@ export class CancellationRepository implements ICancellationRepository {
   ): Promise<CancellationRequestEntity> {
     return await prisma.$transaction(async (tx) => {
       // 1. 取引を scheduled → canceled に更新（楽観ロック）
-      const updatedTransactions = await tx.$queryRaw<{ id: string }[]>`
-        UPDATE transactions
-        SET status = 'canceled', updated_at = NOW()
-        WHERE id = ${transactionId}::uuid
-          AND status = 'scheduled'
-        RETURNING id
-      `;
+      const txUpdateResult = await tx.transaction.updateMany({
+        where: { id: transactionId, status: 'scheduled' },
+        data: { status: 'canceled' },
+      });
 
-      if (updatedTransactions.length === 0) {
+      if (txUpdateResult.count === 0) {
         // scheduled でないなら、既にキャンセル済み or 他の状態
         const existing = await tx.transaction.findUnique({ where: { id: transactionId }, select: { status: true } });
         if (existing?.status === 'canceled') {
@@ -63,11 +60,10 @@ export class CancellationRepository implements ICancellationRepository {
       }
 
       // 2. アイテムを available に戻す
-      await tx.$executeRaw`
-        UPDATE items
-        SET status = 'available', updated_at = NOW()
-        WHERE id = ${itemId}::uuid
-      `;
+      await tx.item.update({
+        where: { id: itemId },
+        data: { status: 'available' },
+      });
 
       // 3. キャンセル履歴を新規作成（UNIQUE 制約違反 → ALREADY_CANCELED）
       let cancellationRequest: CancellationRequest;
@@ -88,10 +84,15 @@ export class CancellationRepository implements ICancellationRepository {
       }
 
       // 4. ペナルティ評価ログを作成（cancel: -10点）
-      await tx.$executeRaw`
-        INSERT INTO evaluations (transaction_id, target_user_id, reviewer_id, type, score_change, created_at, updated_at)
-        VALUES (${transactionId}::uuid, ${requesterId}::uuid, NULL, 'cancel', -10, NOW(), NOW())
-      `;
+      await tx.evaluation.create({
+        data: {
+          transaction_id: transactionId,
+          target_user_id: requesterId,
+          reviewer_id: null,
+          type: 'cancel',
+          score_change: -10,
+        },
+      });
 
       // 5. 申請者の信用スコアを -10 更新
       await tx.user.update({
@@ -120,15 +121,12 @@ export class CancellationRepository implements ICancellationRepository {
   ): Promise<void> {
     await prisma.$transaction(async (tx) => {
       // 1. 取引を scheduled → canceled に更新（楽観ロック）
-      const updatedTransactions = await tx.$queryRaw<{ id: string }[]>`
-        UPDATE transactions
-        SET status = 'canceled', updated_at = NOW()
-        WHERE id = ${transactionId}::uuid
-          AND status = 'scheduled'
-        RETURNING id
-      `;
+      const txUpdateResult = await tx.transaction.updateMany({
+        where: { id: transactionId, status: 'scheduled' },
+        data: { status: 'canceled' },
+      });
 
-      if (updatedTransactions.length === 0) {
+      if (txUpdateResult.count === 0) {
         const existing = await tx.transaction.findUnique({ where: { id: transactionId }, select: { status: true } });
         if (existing?.status === 'canceled') {
           throw new Error('ALREADY_CANCELED');
@@ -137,17 +135,21 @@ export class CancellationRepository implements ICancellationRepository {
       }
 
       // 2. アイテムを available に戻す
-      await tx.$executeRaw`
-        UPDATE items
-        SET status = 'available', updated_at = NOW()
-        WHERE id = ${itemId}::uuid
-      `;
+      await tx.item.update({
+        where: { id: itemId },
+        data: { status: 'available' },
+      });
 
       // 3. ペナルティ評価ログを作成（no_show: -30点）
-      await tx.$executeRaw`
-        INSERT INTO evaluations (transaction_id, target_user_id, reviewer_id, type, score_change, created_at, updated_at)
-        VALUES (${transactionId}::uuid, ${targetUserId}::uuid, ${reporterId}::uuid, 'no_show', -30, NOW(), NOW())
-      `;
+      await tx.evaluation.create({
+        data: {
+          transaction_id: transactionId,
+          target_user_id: targetUserId,
+          reviewer_id: reporterId,
+          type: 'no_show',
+          score_change: -30,
+        },
+      });
 
       // 4. ドタキャン対象者の信用スコアを -30 更新
       await tx.user.update({
