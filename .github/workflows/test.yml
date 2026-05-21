@@ -1,0 +1,78 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: trading_text_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d trading_text_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/trading_text_test
+      STAGING_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/trading_text_test
+      RUN_STAGING_RLS_TESTS: "1"
+      SUPABASE_JWT_SECRET: ci-supabase-jwt-secret
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGDATABASE: trading_text_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run generate
+
+      - name: Check Prisma and Supabase schema sync
+        run: npm run schema:check
+
+      - name: Prepare local Supabase-compatible database
+        run: |
+          psql -v ON_ERROR_STOP=1 -f tools/ci/setup-test-db.sql
+          psql -v ON_ERROR_STOP=1 -f docs/supabase_schema.sql
+          for file in docs/migrations/*.sql; do
+            psql -v ON_ERROR_STOP=1 -f "$file"
+          done
+          psql -v ON_ERROR_STOP=1 -f tools/ci/grant-test-roles.sql
+
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+
+      - name: Run backend integration tests
+        working-directory: backend
+        run: npm test
+
+      - name: Run RLS tests
+        working-directory: backend
+        run: npm run test:rls:staging
