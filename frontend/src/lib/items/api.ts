@@ -1,0 +1,150 @@
+import { apiFetch } from "@/lib/api/client";
+import { createClient } from "@/lib/supabase/client";
+
+export const ITEM_IMAGE_BUCKET = "item-images";
+
+export type ItemCondition = "new" | "used_good" | "used_bad";
+export type ItemStatus = "available" | "matching" | "completed" | "canceled";
+
+export type ItemImage = {
+  id: string;
+  item_id: string;
+  image_url: string;
+  display_order: number;
+  created_at: string;
+};
+
+export type Item = {
+  id: string;
+  seller_id: string;
+  title: string;
+  author: string | null;
+  description: string | null;
+  condition: ItemCondition;
+  category: string | null;
+  price: number;
+  status: ItemStatus;
+  images: ItemImage[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type GetItemsParams = {
+  q?: string;
+  category?: string;
+  condition?: ItemCondition;
+  status?: ItemStatus;
+};
+
+export type CreateItemPayload = {
+  title: string;
+  author?: string;
+  description?: string;
+  condition: ItemCondition;
+  category?: string;
+  price: number;
+  image_urls?: string[];
+};
+
+export async function getItems(params: GetItemsParams = {}): Promise<Item[]> {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) {
+      searchParams.set(key, value);
+    }
+  });
+
+  const query = searchParams.toString();
+  const response = await apiFetch(`/api/items${query ? `?${query}` : ""}`, {
+    requireAuth: false,
+  });
+
+  return parseJsonResponse<Item[]>(response, "出品一覧の取得に失敗しました");
+}
+
+export async function getItem(id: string): Promise<Item> {
+  const response = await apiFetch(`/api/items/${encodeURIComponent(id)}`, {
+    requireAuth: false,
+  });
+
+  return parseJsonResponse<Item>(response, "出品詳細の取得に失敗しました");
+}
+
+export async function createItem(payload: CreateItemPayload): Promise<Item> {
+  const response = await apiFetch("/api/items", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  return parseJsonResponse<Item>(response, "出品に失敗しました");
+}
+
+export async function uploadItemImages(files: File[]): Promise<string[]> {
+  if (files.length === 0) {
+    return [];
+  }
+
+  const supabase = createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    throw new Error("画像アップロードにはログインが必要です");
+  }
+
+  const uploadedUrls: string[] = [];
+
+  for (const [index, file] of files.entries()) {
+    const extension = getFileExtension(file.name);
+    const objectPath = `${user.id}/${Date.now()}-${index}-${crypto.randomUUID()}${extension}`;
+    const { error } = await supabase.storage.from(ITEM_IMAGE_BUCKET).upload(objectPath, file, {
+      cacheControl: "3600",
+      contentType: file.type || "application/octet-stream",
+      upsert: false,
+    });
+
+    if (error) {
+      throw new Error(`画像アップロードに失敗しました: ${error.message}`);
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from(ITEM_IMAGE_BUCKET).getPublicUrl(objectPath);
+    uploadedUrls.push(publicUrl);
+  }
+
+  return uploadedUrls;
+}
+
+export function conditionLabel(condition: ItemCondition): string {
+  switch (condition) {
+    case "new":
+      return "新品・未使用";
+    case "used_good":
+      return "目立った傷や汚れなし";
+    case "used_bad":
+      return "傷や汚れあり";
+  }
+}
+
+async function parseJsonResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const message =
+      data && typeof data === "object" && "error" in data && typeof data.error === "string"
+        ? data.error
+        : fallbackMessage;
+    throw new Error(message);
+  }
+
+  return data as T;
+}
+
+function getFileExtension(fileName: string): string {
+  const match = fileName.match(/\.[a-zA-Z0-9]+$/);
+  return match ? match[0].toLowerCase() : "";
+}

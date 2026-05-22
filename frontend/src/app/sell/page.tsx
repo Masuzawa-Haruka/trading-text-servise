@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { mockStore } from "@/lib/mockStore";
+import {
+  createItem,
+  uploadItemImages,
+  type ItemCondition,
+} from "@/lib/items/api";
 
 const OSAKA_UNIV_DEPARTMENTS = [
   "文学部 人文学科",
@@ -31,53 +35,120 @@ const OSAKA_UNIV_DEPARTMENTS = [
   "基礎工学部 情報科学科",
 ];
 
+type ImageDraft = {
+  file: File;
+  previewUrl: string;
+};
+
 export default function SellPage() {
   const router = useRouter();
-  
-  const [images, setImages] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const imagesRef = useRef<ImageDraft[]>([]);
+
+  const [images, setImages] = useState<ImageDraft[]>([]);
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [description, setDescription] = useState("");
   const [department, setDepartment] = useState("");
   const [showDeptSuggestions, setShowDeptSuggestions] = useState(false);
-  const [condition, setCondition] = useState("");
+  const [condition, setCondition] = useState<ItemCondition | "">("");
   const [campus, setCampus] = useState("");
   const [price, setPrice] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredDepartments = OSAKA_UNIV_DEPARTMENTS.filter(d => d.includes(department));
+  const filteredDepartments = useMemo(
+    () => OSAKA_UNIV_DEPARTMENTS.filter((departmentName) => departmentName.includes(department)),
+    [department]
+  );
 
-  const handleAddDummyImage = () => {
-    if (images.length < 5) {
-      setImages([...images, `https://placehold.co/100x100/e2e8f0/64748b?text=Img+${images.length + 1}`]);
+  useEffect(() => {
+    imagesRef.current = images;
+  }, [images]);
+
+  useEffect(() => {
+    return () => {
+      imagesRef.current.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+    };
+  }, []);
+
+  const handleAddImages = (files: FileList | null) => {
+    if (!files) return;
+
+    const selectedFiles = Array.from(files);
+    const nextImages = [...images];
+
+    for (const file of selectedFiles) {
+      if (nextImages.length >= 5) break;
+      if (!file.type.startsWith("image/")) {
+        setError("画像ファイルのみアップロードできます");
+        continue;
+      }
+      nextImages.push({
+        file,
+        previewUrl: URL.createObjectURL(file),
+      });
+    }
+
+    setImages(nextImages);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
   const handleRemoveImage = (index: number) => {
-    setImages(images.filter((_, i) => i !== index));
+    const target = images[index];
+    if (target) {
+      URL.revokeObjectURL(target.previewUrl);
+    }
+    setImages(images.filter((_, imageIndex) => imageIndex !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !condition || !campus || price === "" || !department) {
-      alert("必須項目をすべて入力してください");
+    setError(null);
+
+    const normalizedTitle = title.trim();
+    const normalizedDepartment = department.trim();
+    const normalizedAuthor = author.trim();
+    const normalizedDescription = description.trim();
+    const parsedPrice = Number.parseInt(price, 10);
+
+    if (!normalizedTitle || !condition || !campus || price === "" || !normalizedDepartment) {
+      setError("必須項目をすべて入力してください");
       return;
     }
 
-    const numPrice = parseInt(price, 10);
+    if (Number.isNaN(parsedPrice) || parsedPrice < 0) {
+      setError("価格は0円以上の整数で入力してください");
+      return;
+    }
 
-    mockStore.addItem({
-      title,
-      author: author || "不明",
-      condition,
-      campus,
-      price: numPrice,
-      free: numPrice === 0,
-      // description and department would normally be saved here too, 
-      // but MockItem doesn't have them yet. We will mock it gracefully.
-    });
+    if (images.length === 0) {
+      setError("商品画像を1枚以上選択してください");
+      return;
+    }
 
-    alert("出品しました！");
-    router.push("/");
+    setIsSubmitting(true);
+
+    try {
+      const imageUrls = await uploadItemImages(images.map((image) => image.file));
+      const created = await createItem({
+        title: normalizedTitle,
+        author: normalizedAuthor || undefined,
+        description: normalizedDescription || undefined,
+        condition,
+        category: normalizedDepartment,
+        price: parsedPrice,
+        image_urls: imageUrls,
+      });
+
+      router.push(`/items/${created.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "出品に失敗しました");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -87,19 +158,31 @@ export default function SellPage() {
       </header>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-6 p-4">
-        {/* 画像アップロード */}
+        {error ? (
+          <div className="rounded-md bg-red-50 px-3 py-3 text-sm font-bold text-red-700">{error}</div>
+        ) : null}
+
         <section>
           <label className="mb-2 block text-sm font-bold text-slate-700">
             商品画像 <span className="text-xs font-normal text-red-500">*必須 (最大5枚)</span>
           </label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(event) => handleAddImages(event.target.files)}
+            className="sr-only"
+          />
           <div className="flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none]">
-            {images.map((img, idx) => (
-              <div key={idx} className="relative size-20 shrink-0 rounded border border-slate-200 bg-slate-100">
-                <img src={img} alt={`Preview ${idx}`} className="w-full h-full object-cover rounded" />
+            {images.map((image, idx) => (
+              <div key={image.previewUrl} className="relative size-20 shrink-0 rounded border border-slate-200 bg-slate-100">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={image.previewUrl} alt={`Preview ${idx + 1}`} className="h-full w-full rounded object-cover" />
                 <button
                   type="button"
                   onClick={() => handleRemoveImage(idx)}
-                  className="absolute -top-2 -right-2 bg-slate-800 text-white rounded-full size-5 flex items-center justify-center text-xs"
+                  className="absolute -right-2 -top-2 flex size-5 items-center justify-center rounded-full bg-slate-800 text-xs text-white"
                 >
                   ×
                 </button>
@@ -108,8 +191,8 @@ export default function SellPage() {
             {images.length < 5 && (
               <button
                 type="button"
-                onClick={handleAddDummyImage}
-                className="grid size-20 shrink-0 place-items-center rounded bg-slate-100 text-slate-400 border border-dashed border-slate-300 hover:bg-slate-200 transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+                className="grid size-20 shrink-0 place-items-center rounded border border-dashed border-slate-300 bg-slate-100 text-slate-400 transition-colors hover:bg-slate-200"
               >
                 <span className="text-2xl">+</span>
               </button>
@@ -117,7 +200,6 @@ export default function SellPage() {
           </div>
         </section>
 
-        {/* 商品詳細 */}
         <section className="flex flex-col gap-4">
           <div>
             <label className="mb-1 block text-sm font-bold text-slate-700">
@@ -162,15 +244,15 @@ export default function SellPage() {
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
             {showDeptSuggestions && filteredDepartments.length > 0 && (
-              <ul className="absolute z-20 w-full mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-md shadow-lg">
+              <ul className="absolute z-20 mt-1 max-h-40 w-full overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
                 {filteredDepartments.map((dept) => (
                   <li
                     key={dept}
-                    onClick={() => {
+                    onMouseDown={() => {
                       setDepartment(dept);
                       setShowDeptSuggestions(false);
                     }}
-                    className="px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 cursor-pointer"
+                    className="cursor-pointer px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
                   >
                     {dept}
                   </li>
@@ -185,13 +267,13 @@ export default function SellPage() {
             </label>
             <select
               value={condition}
-              onChange={(e) => setCondition(e.target.value)}
+              onChange={(e) => setCondition(e.target.value as ItemCondition | "")}
               className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">選択してください</option>
-              <option value="新品・未使用">新品・未使用</option>
-              <option value="目立った傷や汚れなし">目立った傷や汚れなし</option>
-              <option value="傷や汚れあり">傷や汚れあり</option>
+              <option value="new">新品・未使用</option>
+              <option value="used_good">目立った傷や汚れなし</option>
+              <option value="used_bad">傷や汚れあり</option>
             </select>
           </div>
 
@@ -209,10 +291,10 @@ export default function SellPage() {
               <option value="吹田キャンパス">吹田キャンパス</option>
               <option value="箕面キャンパス">箕面キャンパス</option>
             </select>
+            <p className="mt-1 text-xs text-slate-500">キャンパスは現在DB保存対象外です</p>
           </div>
         </section>
 
-        {/* 価格 */}
         <section>
           <label className="mb-1 block text-sm font-bold text-slate-700">
             価格 <span className="text-xs font-normal text-red-500">*必須</span>
@@ -224,32 +306,29 @@ export default function SellPage() {
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               placeholder="0"
-              className="w-full rounded-md border border-slate-300 py-2 pl-7 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              className="w-full rounded-md border border-slate-300 py-2 pl-7 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
           </div>
           <p className="mt-1 text-xs text-slate-500">※0円(無償譲渡)も可能です</p>
         </section>
 
-        {/* 説明文 (Moved below Price) */}
         <section>
-          <label className="mb-1 block text-sm font-bold text-slate-700">
-            説明文
-          </label>
+          <label className="mb-1 block text-sm font-bold text-slate-700">説明文</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="例: 書き込みが数ページあります。表紙に少し折れがあります。"
             rows={4}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+            className="w-full resize-none rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
         </section>
 
-        {/* 送信ボタン */}
         <button
           type="submit"
-          className="mt-4 w-full rounded-full bg-[#0047c7] py-3 text-sm font-bold text-white shadow-md hover:bg-blue-700"
+          disabled={isSubmitting}
+          className="mt-4 w-full rounded-full bg-[#0047c7] py-3 text-sm font-bold text-white shadow-md hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
         >
-          出品する
+          {isSubmitting ? "出品中..." : "出品する"}
         </button>
       </form>
     </main>
