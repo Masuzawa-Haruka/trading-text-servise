@@ -15,25 +15,24 @@ export default function Home() {
 
   const apiParams = useMemo(() => {
     return {
-      q: query.trim() || undefined,
-      category:
-        selectedCategory !== "すべて" && selectedCategory !== "0円のみ"
-          ? selectedCategory
-          : undefined,
+      request: {
+        q: query.trim() || undefined,
+        category:
+          selectedCategory !== "すべて" && selectedCategory !== "0円のみ"
+            ? selectedCategory
+            : undefined,
+      },
+      onlyFree: selectedCategory === "0円のみ",
     };
   }, [query, selectedCategory]);
 
   useEffect(() => {
     let isMounted = true;
 
-    getItems(apiParams)
+    getItems(apiParams.request)
       .then((data) => {
         if (!isMounted) return;
-        setItems(
-          selectedCategory === "0円のみ"
-            ? data.filter((item) => item.price === 0)
-            : data
-        );
+        setItems(apiParams.onlyFree ? data.filter((item) => item.price === 0) : data);
       })
       .catch((err) => {
         if (!isMounted) return;
@@ -49,7 +48,7 @@ export default function Home() {
     return () => {
       isMounted = false;
     };
-  }, [apiParams, selectedCategory]);
+  }, [apiParams]);
 
   return (
     <main className="mx-auto min-h-dvh max-w-[430px] bg-white">

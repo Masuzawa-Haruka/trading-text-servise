@@ -151,8 +151,13 @@ export default function SellPage() {
       handoffLocation === OTHER_LOCATION_VALUE ? customHandoffLocation.trim() : handoffLocation.trim();
     const parsedPrice = Number.parseInt(price, 10);
 
-    if (!normalizedTitle || !condition || !campus || !normalizedHandoffLocation || price === "" || !normalizedDepartment) {
+    if (!normalizedTitle || !condition || !campus || price === "" || !normalizedDepartment) {
       setError("必須項目をすべて入力してください");
+      return;
+    }
+
+    if (!normalizedHandoffLocation) {
+      setError("受け渡し場所を入力してください");
       return;
     }
 

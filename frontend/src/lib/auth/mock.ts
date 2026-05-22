@@ -47,6 +47,15 @@ const mockAuthClient = {
       error: null,
     };
   },
+  async refreshSession() {
+    return {
+      data: {
+        user: mockUser,
+        session: createMockSession(),
+      },
+      error: null,
+    };
+  },
   async signInWithPassword() {
     return {
       data: {

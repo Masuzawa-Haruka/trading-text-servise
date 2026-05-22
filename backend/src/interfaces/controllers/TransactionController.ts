@@ -13,6 +13,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth';
 import { CreateTransactionUseCase } from '../../usecases/CreateTransactionUseCase';
+import { GetTransactionUseCase } from '../../usecases/GetTransactionUseCase';
 import { GetTransactionsUseCase } from '../../usecases/GetTransactionsUseCase';
 import { UpdateTransactionUseCase } from '../../usecases/UpdateTransactionUseCase';
 import { VALID_TRANSACTION_STATUSES } from '../../domain/transaction';
@@ -22,6 +23,7 @@ import { isValidUuid, isValidIso8601, INT32_MAX } from '../../lib/validation';
 export class TransactionController {
   constructor(
     private readonly createTransactionUseCase: CreateTransactionUseCase,
+    private readonly getTransactionUseCase: GetTransactionUseCase,
     private readonly getTransactionsUseCase: GetTransactionsUseCase,
     private readonly updateTransactionUseCase: UpdateTransactionUseCase,
   ) {}
@@ -41,6 +43,36 @@ export class TransactionController {
       res.status(200).json(transactions);
     } catch {
       res.status(500).json({ error: 'Internal Server Error' });
+    }
+  };
+
+  /**
+   * GET /api/transactions/:id
+   * 認証ユーザーが当事者として関わる取引を1件返す。
+   * 認証必須。:id は UUID 形式必須。
+   */
+  getTransaction = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: '認証が必要です' });
+        return;
+      }
+
+      if (!isValidUuid(req.params.id)) {
+        res.status(400).json({ error: 'id は有効な UUID 形式で指定してください' });
+        return;
+      }
+
+      const transaction = await this.getTransactionUseCase.execute(req.params.id, req.user.id);
+      res.status(200).json(transaction);
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        res.status(404).json({ error: error.message });
+      } else if (error instanceof ForbiddenError) {
+        res.status(403).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: 'Internal Server Error' });
+      }
     }
   };
 

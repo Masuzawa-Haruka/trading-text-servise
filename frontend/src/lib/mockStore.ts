@@ -198,7 +198,7 @@ class MockStore {
     return all.filter((m) => m.transactionId === txId);
   }
 
-  addMessage(txId: string, content: string, type: "text" | "system" = "text") {
+  addMessage(txId: string, content: string, type: "text" | "system" = "text"): MockMessage {
     const all = this.get<MockMessage[]>("mock_messages", []);
     const newMsg: MockMessage = {
       id: `m${Date.now()}`,
@@ -209,6 +209,7 @@ class MockStore {
       type,
     };
     this.set("mock_messages", [...all, newMsg]);
+    return newMsg;
   }
 }
 

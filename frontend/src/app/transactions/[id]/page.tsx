@@ -1,8 +1,24 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { mockStore, MockTransaction, MockMessage, MockItem, MockLocation } from "@/lib/mockStore";
+import { MOCK_AUTH_ENABLED, MOCK_USER_ID } from "@/lib/auth/mock";
+import { getItem, type Item } from "@/lib/items/api";
+import { mockStore, type MockLocation } from "@/lib/mockStore";
+import { createClient } from "@/lib/supabase/client";
+import {
+  getScheduleProposals,
+  getTransaction,
+  getTransactionMessages,
+  respondScheduleProposal,
+  sendScheduleProposal,
+  sendTransactionMessage,
+  updateTransaction,
+  type ScheduleProposal,
+  type Transaction,
+  type TransactionMessage,
+} from "@/lib/transactions/api";
 
 type Candidate = {
   date: string;
@@ -10,47 +26,81 @@ type Candidate = {
   locationId: string;
 };
 
-export default function TransactionPage() {
-  const params = useParams();
-  const router = useRouter();
-  const id = params.id as string;
+const STATUS_LABEL: Record<Transaction["status"], string> = {
+  proposing: "日程調整中",
+  scheduled: "予定決定済",
+  completed: "取引完了",
+  canceled: "キャンセル",
+};
 
-  const [transaction, setTransaction] = useState<MockTransaction | null>(null);
-  const [item, setItem] = useState<MockItem | null>(null);
-  const [messages, setMessages] = useState<MockMessage[]>([]);
+export default function TransactionPage() {
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const transactionId = params.id;
+
+  const [transaction, setTransaction] = useState<Transaction | null>(null);
+  const [item, setItem] = useState<Item | null>(null);
+  const [messages, setMessages] = useState<TransactionMessage[]>([]);
+  const [proposals, setProposals] = useState<ScheduleProposal[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [locations, setLocations] = useState<MockLocation[]>([]);
   const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [locations, setLocations] = useState<MockLocation[]>([]);
-
-  // Schedule Candidates State
+  const [selectedArea, setSelectedArea] = useState("");
   const [candidates, setCandidates] = useState<Candidate[]>([
-    { date: "", time: "", locationId: "" }
+    { date: "", time: "", locationId: "" },
   ]);
-  const [selectedArea, setSelectedArea] = useState<string>("");
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const loadData = () => {
-    const tx = mockStore.getTransaction(id);
-    if (tx) {
-      setTransaction(tx);
-      setItem(mockStore.getItem(tx.itemId) || null);
-      setMessages(mockStore.getMessages(id));
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const userId = MOCK_AUTH_ENABLED ? mockStore.currentUser.id : user?.id ?? null;
+      setCurrentUserId(userId);
+      setLocations(mockStore.getLocations());
+
+      const nextTransaction = await getTransaction(transactionId);
+      const [nextItem, nextProposals] = await Promise.all([
+        getItem(nextTransaction.item_id),
+        nextTransaction.status === "proposing"
+          ? getScheduleProposals(nextTransaction.id).catch(() => [])
+          : Promise.resolve([]),
+      ]);
+
+      const nextMessages =
+        nextTransaction.status === "scheduled"
+          ? await getTransactionMessages(nextTransaction.id)
+          : [];
+
+      setTransaction(nextTransaction);
+      setItem(nextItem);
+      setProposals(nextProposals);
+      setMessages(nextMessages);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "取引情報の取得に失敗しました");
+    } finally {
+      setIsLoading(false);
     }
-    setLocations(mockStore.getLocations());
-  };
+  }, [transactionId]);
 
   useEffect(() => {
-    loadData();
-  }, [id]);
+    const timer = window.setTimeout(() => {
+      void loadData();
+    }, 0);
 
-  useEffect(() => {
-    if (transaction && transaction.status === "proposing" && messages.length === 0 && !showScheduleModal) {
-      // 取引開始直後（メッセージ0件）なら自動的に日程提案を開く
-      setShowScheduleModal(true);
-    }
-  }, [transaction, messages]);
+    return () => window.clearTimeout(timer);
+  }, [loadData]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -58,258 +108,442 @@ export default function TransactionPage() {
     }
   }, [messages]);
 
-  if (!transaction || !item) return <div className="p-10 text-center">Loading...</div>;
+  const areas = useMemo(
+    () => Array.from(new Set(locations.map((location) => location.area))),
+    [locations],
+  );
 
-  const isSeller = transaction.sellerId === mockStore.currentUser.id;
-  const partnerUser = mockStore.getUser(isSeller ? transaction.buyerId : transaction.sellerId);
+  const pendingProposals = proposals.filter((proposal) => proposal.status === "pending");
+  const canChat = transaction?.status === "scheduled";
+  const isClosed = transaction?.status === "completed" || transaction?.status === "canceled";
+  const isSeller = Boolean(transaction && currentUserId && transaction.seller_id === currentUserId);
+  const partnerLabel = isSeller ? "購入希望者" : "出品者";
 
-  const areas = Array.from(new Set(locations.map(loc => loc.area)));
+  async function handleSend() {
+    const content = text.trim();
+    if (!transaction || !content || isSubmitting) return;
 
-  const handleSend = () => {
-    if (!text.trim()) return;
-    mockStore.addMessage(transaction.id, text.trim(), "text");
-    setText("");
-    loadData();
-  };
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const message = await sendTransactionMessage(transaction.id, content);
+      setMessages((prev) => [...prev, message]);
+      setText("");
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : "メッセージ送信に失敗しました");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
-  const handleAction = (action: string) => {
+  async function handleAction(action: string) {
+    if (!transaction || !item || isSubmitting) return;
     setShowMenu(false);
+    setError(null);
+
     if (action === "schedule") {
       setShowScheduleModal(true);
-    } else if (action === "price") {
-      const price = prompt("希望の金額を入力してください (例: 200)");
-      if (!price) return;
-      mockStore.addMessage(transaction.id, `【価格交渉】\n希望価格: ${price}円`, "system");
-      mockStore.updateTransactionPrice(transaction.id, parseInt(price, 10));
-      alert("価格交渉を提案し、相手が(自動モックとして)承認しました！価格が更新されます。");
-    } else if (action === "cancel") {
-      const reason = prompt("キャンセルの理由を入力してください");
-      if (!reason) return;
-      mockStore.addMessage(transaction.id, `【キャンセル申請】\n理由: ${reason}`, "system");
-      mockStore.updateTransactionStatus(transaction.id, "canceled");
-      mockStore.updateItemStatus(item.id, "available");
-      alert("取引がキャンセルされました。");
-    } else if (action === "evaluate") {
-      if (transaction.status !== "scheduled" && transaction.status !== "proposing") {
-         alert("まだ評価できる段階ではありません");
-         return;
-      }
-      mockStore.addMessage(transaction.id, `【評価】\n${mockStore.currentUser.nickname}さんが評価を完了しました。`, "system");
-      mockStore.updateTransactionStatus(transaction.id, "completed");
-      mockStore.updateItemStatus(item.id, "completed");
-      alert("評価が完了し、取引が終了しました！");
-    }
-    loadData();
-  };
-
-  const addCandidate = () => {
-    if (candidates.length >= 5) return;
-    setCandidates([...candidates, { date: "", time: "", locationId: "" }]);
-  };
-
-  const updateCandidate = (index: number, field: keyof Candidate, value: string) => {
-    const newCands = [...candidates];
-    newCands[index] = { ...newCands[index], [field]: value };
-    setCandidates(newCands);
-  };
-
-  const submitSchedule = () => {
-    const validCandidates = candidates.filter(c => c.date && c.time && c.locationId);
-    if (validCandidates.length === 0) {
-      alert("少なくとも1つの候補を完全に入力してください。");
       return;
     }
-    
-    let msgContent = "【日程提案】\n";
-    validCandidates.forEach((c, idx) => {
-      const loc = locations.find(l => l.id === c.locationId);
-      msgContent += `候補${idx + 1}: ${c.date} ${c.time}\n📍 ${loc?.area} - ${loc?.name}\n\n`;
-    });
-    
-    mockStore.addMessage(transaction.id, msgContent.trim(), "system");
-    mockStore.updateTransactionStatus(transaction.id, "scheduled");
-    setShowScheduleModal(false);
-    setCandidates([{ date: "", time: "", locationId: "" }]);
-    alert("日程を提案し、相手が(自動モックとして)承認しました！ステータスが更新されます。");
-    loadData();
-  };
 
-  const statusLabel = {
-    proposing: "交渉中",
-    scheduled: "予定決定済",
-    completed: "取引完了",
-    canceled: "キャンセル",
-  }[transaction.status];
+    if (action === "price") {
+      const price = window.prompt("希望の金額を入力してください (例: 200)");
+      if (!price) return;
+      const parsedPrice = Number(price);
+      if (!Number.isInteger(parsedPrice) || parsedPrice < 0) {
+        setError("価格は0以上の整数で入力してください");
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        await updateTransaction(transaction.id, { final_price: parsedPrice });
+        await loadData();
+      } catch (actionError) {
+        setError(actionError instanceof Error ? actionError.message : "価格更新に失敗しました");
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
+    if (action === "evaluate") {
+      if (transaction.status !== "scheduled") {
+        setError("日程確定後に取引完了できます");
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        await updateTransaction(transaction.id, { status: "completed" });
+        await loadData();
+      } catch (actionError) {
+        setError(actionError instanceof Error ? actionError.message : "取引完了に失敗しました");
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
+    if (action === "cancel") {
+      setError("キャンセル実行はキャンセルAPI結合のPRで接続します");
+    }
+  }
+
+  function addCandidate() {
+    if (candidates.length >= 5) return;
+    setCandidates([...candidates, { date: "", time: "", locationId: "" }]);
+  }
+
+  function updateCandidate(index: number, field: keyof Candidate, value: string) {
+    const nextCandidates = [...candidates];
+    nextCandidates[index] = { ...nextCandidates[index], [field]: value };
+    setCandidates(nextCandidates);
+  }
+
+  async function submitSchedule() {
+    if (!transaction || isSubmitting) return;
+    const validCandidates = candidates
+      .map((candidate) => {
+        const location = locations.find((loc) => loc.id === candidate.locationId);
+        if (!candidate.date || !candidate.time || !location) return null;
+        return {
+          proposed_datetime: new Date(`${candidate.date}T${candidate.time}:00+09:00`).toISOString(),
+          proposed_place: `${location.area} - ${location.name}`,
+        };
+      })
+      .filter((candidate): candidate is { proposed_datetime: string; proposed_place: string } =>
+        Boolean(candidate),
+      );
+
+    if (validCandidates.length === 0) {
+      setError("少なくとも1つの候補を完全に入力してください");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await sendScheduleProposal({
+        transaction_id: transaction.id,
+        candidates: validCandidates,
+      });
+      setShowScheduleModal(false);
+      setCandidates([{ date: "", time: "", locationId: "" }]);
+      await loadData();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "日程提案の送信に失敗しました");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleProposalResponse(proposalId: string, candidateId: string) {
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await respondScheduleProposal(proposalId, { status: "accepted", candidate_id: candidateId });
+      await loadData();
+    } catch (responseError) {
+      setError(responseError instanceof Error ? responseError.message : "日程提案への回答に失敗しました");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  if (isLoading) {
+    return <div className="p-10 text-center text-sm text-slate-500">Loading...</div>;
+  }
+
+  if (!transaction || !item) {
+    return (
+      <main className="mx-auto min-h-dvh max-w-[430px] bg-white p-6">
+        <button onClick={() => router.back()} className="mb-6 text-sm font-bold text-slate-600">
+          &lt; 戻る
+        </button>
+        <div className="rounded-lg bg-red-50 p-4 text-sm font-bold text-red-700">
+          {error ?? "取引が見つかりません"}
+        </div>
+      </main>
+    );
+  }
 
   return (
-    <main className="mx-auto flex h-dvh max-w-[430px] flex-col bg-[#f5f7fb] relative">
-      {/* Header */}
-      <header className="sticky top-0 z-10 flex h-14 items-center border-b border-slate-200 bg-white px-4 shadow-sm shrink-0">
+    <main className="relative mx-auto flex h-dvh max-w-[430px] flex-col bg-[#f5f7fb]">
+      <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center border-b border-slate-200 bg-white px-4 shadow-sm">
         <button onClick={() => router.back()} className="text-xl font-bold text-slate-700">
           &lt;
         </button>
         <div className="ml-4 flex min-w-0 flex-1 flex-col">
-          <h1 className="truncate text-sm font-black text-slate-900">{partnerUser.nickname}</h1>
-          <div className="text-[10px] text-slate-500">
-            {item.title} (ステータス: <span className="font-bold text-blue-600">{statusLabel}</span>)
-            {transaction.finalPrice !== undefined && ` - 最終価格: ¥${transaction.finalPrice}`}
+          <h1 className="truncate text-sm font-black text-slate-900">{partnerLabel}</h1>
+          <div className="truncate text-[10px] text-slate-500">
+            {item.title} (ステータス:{" "}
+            <span className="font-bold text-blue-600">{STATUS_LABEL[transaction.status]}</span>)
+            {transaction.final_price !== null && ` - 最終価格: ¥${transaction.final_price}`}
           </div>
         </div>
       </header>
 
-      {/* Chat Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+      <div ref={scrollRef} className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
+        {error && (
+          <div className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{error}</div>
+        )}
+
         <div className="mx-auto rounded-full bg-slate-200 px-3 py-1 text-xs text-slate-500">
-          取引が開始されました！挨拶をしてみましょう。
+          取引が開始されました。日程を確定するとメッセージを送れます。
         </div>
 
-        {messages.map((m) => {
-          const isMe = m.senderId === mockStore.currentUser.id;
-          if (m.type === "system") {
-            return (
-              <div key={m.id} className="mx-auto my-2 max-w-[85%] rounded bg-blue-50 p-3 text-sm text-blue-900 border border-blue-100 shadow-sm">
-                <div className="whitespace-pre-wrap">{m.content}</div>
-              </div>
-            );
-          }
+        {transaction.meeting_datetime && transaction.meeting_place && (
+          <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+            <div className="font-bold">受け渡し予定</div>
+            <div>{new Date(transaction.meeting_datetime).toLocaleString("ja-JP")}</div>
+            <div>{transaction.meeting_place}</div>
+          </div>
+        )}
+
+        {pendingProposals.map((proposal) => {
+          const isMine = proposal.sender_id === currentUserId || (MOCK_AUTH_ENABLED && currentUserId === MOCK_USER_ID);
           return (
-            <div key={m.id} className={`flex max-w-[80%] flex-col ${isMe ? "self-end" : "self-start"}`}>
+            <div
+              key={proposal.id}
+              className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900 shadow-sm"
+            >
+              <div className="mb-2 font-bold">日程提案</div>
+              <div className="space-y-2">
+                {proposal.candidates.map((candidate) => (
+                  <div key={candidate.id} className="rounded bg-white p-2">
+                    <div>{new Date(candidate.proposed_datetime).toLocaleString("ja-JP")}</div>
+                    <div className="text-xs text-slate-600">{candidate.proposed_place}</div>
+                    {!isMine && (
+                      <button
+                        onClick={() => handleProposalResponse(proposal.id, candidate.id)}
+                        disabled={isSubmitting}
+                        className="mt-2 rounded-full bg-[#0047c7] px-3 py-1 text-xs font-bold text-white disabled:opacity-50"
+                      >
+                        この候補で確定
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {isMine && <div className="mt-2 text-xs text-slate-500">相手の回答待ちです。</div>}
+            </div>
+          );
+        })}
+
+        {messages.map((message) => {
+          const isMe = message.sender_id === currentUserId;
+          return (
+            <div
+              key={message.id}
+              className={`flex max-w-[80%] flex-col ${isMe ? "self-end" : "self-start"}`}
+            >
               <div
                 className={`rounded-2xl px-4 py-2 text-sm shadow-sm ${
                   isMe ? "rounded-tr-sm bg-[#0047c7] text-white" : "rounded-tl-sm bg-white text-slate-900"
                 }`}
               >
-                <div className="whitespace-pre-wrap">{m.content}</div>
+                <div className="whitespace-pre-wrap">{message.content}</div>
               </div>
               <span className={`mt-1 text-[10px] text-slate-400 ${isMe ? "text-right" : "text-left"}`}>
-                {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {new Date(message.created_at).toLocaleTimeString("ja-JP", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
               </span>
             </div>
           );
         })}
+
+        {canChat && messages.length === 0 && (
+          <div className="py-8 text-center text-sm text-slate-500">
+            日程が確定しました。受け渡し前の確認メッセージを送れます。
+          </div>
+        )}
       </div>
 
-      {/* Action Menu (Floating) */}
       {showMenu && (
-        <div className="absolute bottom-16 left-0 right-0 z-20 mx-auto max-w-[430px] animate-in slide-in-from-bottom-2 bg-white px-4 py-4 shadow-[0_-10px_20px_rgba(0,0,0,0.1)] rounded-t-2xl border-t border-slate-100">
+        <div className="absolute bottom-20 left-0 right-0 z-20 mx-auto max-w-[430px] rounded-t-2xl border-t border-slate-100 bg-white px-4 py-4 shadow-[0_-10px_20px_rgba(0,0,0,0.1)]">
           <h3 className="mb-3 text-xs font-bold text-slate-500">取引アクション</h3>
           <div className="grid grid-cols-4 gap-2">
-            <button onClick={() => handleAction("schedule")} className="flex flex-col items-center gap-1">
-              <div className="grid size-12 place-items-center rounded-full bg-blue-50 text-xl text-[#0047c7]">📅</div>
-              <span className="text-[10px] font-bold text-slate-700">日程提案</span>
-            </button>
-            <button onClick={() => handleAction("price")} className="flex flex-col items-center gap-1">
-              <div className="grid size-12 place-items-center rounded-full bg-orange-50 text-xl text-orange-500">💰</div>
-              <span className="text-[10px] font-bold text-slate-700">価格交渉</span>
-            </button>
-            <button onClick={() => handleAction("cancel")} className="flex flex-col items-center gap-1">
-              <div className="grid size-12 place-items-center rounded-full bg-red-50 text-xl text-red-500">✖</div>
-              <span className="text-[10px] font-bold text-slate-700">キャンセル</span>
-            </button>
-            <button onClick={() => handleAction("evaluate")} className="flex flex-col items-center gap-1">
-              <div className="grid size-12 place-items-center rounded-full bg-green-50 text-xl text-green-500">⭐</div>
-              <span className="text-[10px] font-bold text-slate-700">評価する</span>
-            </button>
+            <ActionButton label="日程提案" icon="📅" onClick={() => handleAction("schedule")} />
+            <ActionButton label="価格交渉" icon="¥" onClick={() => handleAction("price")} />
+            <ActionButton label="キャンセル" icon="✕" onClick={() => handleAction("cancel")} />
+            <ActionButton label="完了" icon="✓" onClick={() => handleAction("evaluate")} />
           </div>
         </div>
       )}
 
-      {/* Bottom Action Area (No Free Text Chat) */}
-      <footer className="shrink-0 bg-white px-4 py-3 border-t border-slate-200 z-10">
-        <div className="flex gap-2">
-          <button
-            onClick={() => handleAction("schedule")}
-            disabled={transaction.status === "completed" || transaction.status === "canceled"}
-            className="flex-1 rounded-full bg-[#0047c7] py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50"
-          >
-            📅 日程を提案する
-          </button>
-          <button
-            onClick={() => setShowMenu(!showMenu)}
-            disabled={transaction.status === "completed" || transaction.status === "canceled"}
-            className="grid size-12 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-600 transition-colors hover:bg-slate-200 disabled:opacity-50"
-          >
-            ...
-          </button>
-        </div>
+      <footer className="z-10 shrink-0 border-t border-slate-200 bg-white px-4 py-3">
+        {canChat ? (
+          <div className="flex items-end gap-2">
+            <textarea
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              rows={1}
+              maxLength={1000}
+              placeholder="メッセージを入力"
+              className="min-h-11 flex-1 resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#0047c7] focus:bg-white"
+              disabled={isSubmitting || isClosed}
+            />
+            <button
+              onClick={handleSend}
+              disabled={!text.trim() || isSubmitting || isClosed}
+              className="h-11 shrink-0 rounded-full bg-[#0047c7] px-4 text-sm font-bold text-white shadow-sm disabled:opacity-50"
+            >
+              送信
+            </button>
+            <button
+              onClick={() => setShowMenu(!showMenu)}
+              disabled={isSubmitting || isClosed}
+              className="grid size-11 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-600 transition-colors hover:bg-slate-200 disabled:opacity-50"
+            >
+              ...
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleAction("schedule")}
+              disabled={isSubmitting || isClosed}
+              className="flex-1 rounded-full bg-[#0047c7] py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50"
+            >
+              日程を提案する
+            </button>
+            <button
+              onClick={() => setShowMenu(!showMenu)}
+              disabled={isSubmitting || isClosed}
+              className="grid size-12 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-600 transition-colors hover:bg-slate-200 disabled:opacity-50"
+            >
+              ...
+            </button>
+          </div>
+        )}
       </footer>
 
-      {/* Schedule Proposal Modal */}
       {showScheduleModal && (
         <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/40">
-          <div className="w-full max-w-[430px] rounded-t-2xl bg-white flex flex-col h-[85vh]">
-            <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3 shrink-0">
+          <div className="flex h-[85vh] w-full max-w-[430px] flex-col rounded-t-2xl bg-white">
+            <header className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3">
               <h2 className="text-sm font-bold text-slate-900">日程と場所の提案</h2>
-              <button onClick={() => setShowScheduleModal(false)} className="text-slate-400 text-2xl leading-none">&times;</button>
+              <button onClick={() => setShowScheduleModal(false)} className="text-2xl leading-none text-slate-400">
+                &times;
+              </button>
             </header>
-            
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
-              <div className="text-xs text-slate-600 mb-2">最大5つまで候補を提案できます。相手がその中から1つを選ぶと確定します。</div>
-              
-              {candidates.map((cand, index) => {
-                const selectedLoc = locations.find(l => l.id === cand.locationId);
+
+            <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-4">
+              <div className="text-xs text-slate-600">
+                最大5つまで候補を提案できます。相手がその中から1つを選ぶと確定します。
+              </div>
+
+              {candidates.map((candidate, index) => {
+                const selectedLocation = locations.find((loc) => loc.id === candidate.locationId);
                 return (
-                  <div key={index} className="rounded-lg border border-slate-200 p-3 bg-slate-50 relative">
+                  <div key={index} className="relative rounded-lg border border-slate-200 bg-slate-50 p-3">
                     {candidates.length > 1 && (
-                      <button onClick={() => setCandidates(candidates.filter((_, i) => i !== index))} className="absolute top-2 right-2 text-slate-400 text-xs">削除</button>
+                      <button
+                        onClick={() => setCandidates(candidates.filter((_, i) => i !== index))}
+                        className="absolute right-2 top-2 text-xs text-slate-400"
+                      >
+                        削除
+                      </button>
                     )}
-                    <h3 className="text-sm font-bold text-slate-700 mb-3">候補 {index + 1}</h3>
-                    
-                    <div className="grid grid-cols-2 gap-3 mb-3">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1">日付</label>
-                        <input type="date" value={cand.date} onChange={(e) => updateCandidate(index, "date", e.target.value)} className="w-full rounded border border-slate-300 p-1.5 text-sm bg-white" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1">時間</label>
-                        <select value={cand.time} onChange={(e) => updateCandidate(index, "time", e.target.value)} className="w-full rounded border border-slate-300 p-1.5 text-sm bg-white">
+                    <h3 className="mb-3 text-sm font-bold text-slate-700">候補 {index + 1}</h3>
+
+                    <div className="mb-3 grid grid-cols-2 gap-3">
+                      <label className="block text-xs font-bold text-slate-500">
+                        日付
+                        <input
+                          type="date"
+                          value={candidate.date}
+                          onChange={(event) => updateCandidate(index, "date", event.target.value)}
+                          className="mt-1 w-full rounded border border-slate-300 bg-white p-1.5 text-sm"
+                        />
+                      </label>
+                      <label className="block text-xs font-bold text-slate-500">
+                        時間
+                        <select
+                          value={candidate.time}
+                          onChange={(event) => updateCandidate(index, "time", event.target.value)}
+                          className="mt-1 w-full rounded border border-slate-300 bg-white p-1.5 text-sm"
+                        >
                           <option value="">選択</option>
-                          <option value="12:00">12:00</option>
-                          <option value="12:15">12:15</option>
-                          <option value="12:30">12:30</option>
-                          <option value="12:45">12:45</option>
-                          <option value="16:30">16:30</option>
+                          {["12:00", "12:15", "12:30", "12:45", "16:30", "17:00", "18:00"].map((time) => (
+                            <option key={time} value={time}>
+                              {time}
+                            </option>
+                          ))}
                         </select>
-                      </div>
+                      </label>
                     </div>
 
                     <div className="mb-3">
-                      <label className="block text-xs font-bold text-slate-500 mb-1">場所 (エリア)</label>
-                      <select onChange={(e) => setSelectedArea(e.target.value)} className="w-full rounded border border-slate-300 p-1.5 text-sm bg-white mb-2">
+                      <label className="mb-1 block text-xs font-bold text-slate-500">場所 (エリア)</label>
+                      <select
+                        value={selectedArea}
+                        onChange={(event) => setSelectedArea(event.target.value)}
+                        className="mb-2 w-full rounded border border-slate-300 bg-white p-1.5 text-sm"
+                      >
                         <option value="">エリアを選択</option>
-                        {areas.map(a => <option key={a} value={a}>{a}</option>)}
-                      </select>
-                      
-                      <label className="block text-xs font-bold text-slate-500 mb-1">場所 (スポット)</label>
-                      <select value={cand.locationId} onChange={(e) => updateCandidate(index, "locationId", e.target.value)} disabled={!selectedArea} className="w-full rounded border border-slate-300 p-1.5 text-sm bg-white disabled:bg-slate-100 disabled:text-slate-400">
-                        <option value="">スポットを選択</option>
-                        {locations.filter(l => l.area === selectedArea).map(loc => (
-                          <option key={loc.id} value={loc.id}>{loc.name}</option>
+                        {areas.map((area) => (
+                          <option key={area} value={area}>
+                            {area}
+                          </option>
                         ))}
+                      </select>
+
+                      <label className="mb-1 block text-xs font-bold text-slate-500">場所 (スポット)</label>
+                      <select
+                        value={candidate.locationId}
+                        onChange={(event) => updateCandidate(index, "locationId", event.target.value)}
+                        disabled={!selectedArea}
+                        className="w-full rounded border border-slate-300 bg-white p-1.5 text-sm disabled:bg-slate-100 disabled:text-slate-400"
+                      >
+                        <option value="">スポットを選択</option>
+                        {locations
+                          .filter((location) => location.area === selectedArea)
+                          .map((location) => (
+                            <option key={location.id} value={location.id}>
+                              {location.name}
+                            </option>
+                          ))}
                       </select>
                     </div>
 
-                    {selectedLoc && (
-                      <div className="mt-2 rounded overflow-hidden border border-slate-200 bg-white flex">
-                        <img src={selectedLoc.imageUrl} alt={selectedLoc.name} className="w-24 h-16 object-cover bg-slate-200" />
-                        <div className="p-2 flex items-center text-xs text-slate-600 leading-tight">
+                    {selectedLocation && (
+                      <div className="mt-2 flex overflow-hidden rounded border border-slate-200 bg-white">
+                        <Image
+                          src={selectedLocation.imageUrl}
+                          alt={selectedLocation.name}
+                          width={96}
+                          height={64}
+                          className="h-16 w-24 bg-slate-200 object-cover"
+                        />
+                        <div className="flex items-center p-2 text-xs leading-tight text-slate-600">
                           この周辺で待ち合わせします。目印を確認してください。
                         </div>
                       </div>
                     )}
                   </div>
-                )
+                );
               })}
 
               {candidates.length < 5 && (
-                <button onClick={addCandidate} className="py-3 border border-dashed border-slate-300 text-slate-500 font-bold text-sm rounded-lg hover:bg-slate-50">
-                  ＋ 候補を追加する
+                <button
+                  onClick={addCandidate}
+                  className="rounded-lg border border-dashed border-slate-300 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50"
+                >
+                  + 候補を追加する
                 </button>
               )}
             </div>
 
-            <div className="p-4 border-t border-slate-100 shrink-0">
-              <button onClick={submitSchedule} className="w-full rounded-full bg-[#0047c7] py-3 text-sm font-bold text-white shadow-md">
+            <div className="shrink-0 border-t border-slate-100 p-4">
+              <button
+                onClick={submitSchedule}
+                disabled={isSubmitting}
+                className="w-full rounded-full bg-[#0047c7] py-3 text-sm font-bold text-white shadow-md disabled:opacity-50"
+              >
                 提案を送信する
               </button>
             </div>
@@ -317,5 +551,24 @@ export default function TransactionPage() {
         </div>
       )}
     </main>
+  );
+}
+
+function ActionButton({
+  label,
+  icon,
+  onClick,
+}: {
+  label: string;
+  icon: string;
+  onClick: () => void;
+}) {
+  return (
+    <button onClick={onClick} className="flex flex-col items-center gap-1">
+      <div className="grid size-12 place-items-center rounded-full bg-blue-50 text-xl font-bold text-[#0047c7]">
+        {icon}
+      </div>
+      <span className="text-[10px] font-bold text-slate-700">{label}</span>
+    </button>
   );
 }

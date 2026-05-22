@@ -13,11 +13,13 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}) {
   if (requireAuth) {
     const supabase = createClient();
     const {
-      data: { session },
-      error,
-    } = await supabase.auth.getSession();
+      data: { session: refreshedSession },
+    } = await supabase.auth.refreshSession();
+    const session =
+      refreshedSession ??
+      (await supabase.auth.getSession()).data.session;
 
-    if (error || !session?.access_token) {
+    if (!session?.access_token) {
       throw new Error("ログインが必要です");
     }
 
