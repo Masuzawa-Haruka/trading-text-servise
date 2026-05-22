@@ -63,7 +63,7 @@ export async function getItems(params: GetItemsParams = {}): Promise<Item[]> {
   const searchParams = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
-    if (value) {
+    if (value !== undefined && value !== null && value !== "") {
       searchParams.set(key, value);
     }
   });
@@ -125,24 +125,38 @@ export async function uploadItemImages(files: File[]): Promise<string[]> {
   }
 
   const uploadedUrls: string[] = [];
+  const uploadedPaths: string[] = [];
 
-  for (const [index, file] of files.entries()) {
-    const extension = getFileExtension(file.name);
-    const objectPath = `${user.id}/${Date.now()}-${index}-${crypto.randomUUID()}${extension}`;
-    const { error } = await supabase.storage.from(ITEM_IMAGE_BUCKET).upload(objectPath, file, {
-      cacheControl: "3600",
-      contentType: file.type || "application/octet-stream",
-      upsert: false,
-    });
+  try {
+    for (const [index, file] of files.entries()) {
+      const extension = getFileExtension(file.name);
+      const objectPath = `${user.id}/${Date.now()}-${index}-${crypto.randomUUID()}${extension}`;
+      const { error } = await supabase.storage.from(ITEM_IMAGE_BUCKET).upload(objectPath, file, {
+        cacheControl: "3600",
+        contentType: file.type || "application/octet-stream",
+        upsert: false,
+      });
 
-    if (error) {
-      throw new Error(`画像アップロードに失敗しました: ${error.message}`);
+      if (error) {
+        throw new Error(`画像アップロードに失敗しました: ${error.message}`);
+      }
+
+      uploadedPaths.push(objectPath);
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from(ITEM_IMAGE_BUCKET).getPublicUrl(objectPath);
+      uploadedUrls.push(publicUrl);
     }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from(ITEM_IMAGE_BUCKET).getPublicUrl(objectPath);
-    uploadedUrls.push(publicUrl);
+  } catch (error) {
+    if (uploadedPaths.length > 0) {
+      const { error: removeError } = await supabase.storage
+        .from(ITEM_IMAGE_BUCKET)
+        .remove(uploadedPaths);
+      if (removeError) {
+        console.warn("アップロード済み画像のロールバックに失敗しました", removeError);
+      }
+    }
+    throw error;
   }
 
   return uploadedUrls;
