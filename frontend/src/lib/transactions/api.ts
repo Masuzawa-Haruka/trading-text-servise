@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
-import { MOCK_AUTH_ENABLED } from "@/lib/auth/mock";
+import { MOCK_AUTH_ENABLED, MOCK_USER_ID } from "@/lib/auth/mock";
 import { campusLabel, conditionLabel, type Item } from "@/lib/items/api";
 import { mockStore, type MockItem, type MockTransaction } from "@/lib/mockStore";
 
@@ -66,6 +66,56 @@ export type CancellationRequest = {
   created_at: string;
   updated_at: string;
 };
+
+// ───────────────────────────────────────────
+// 通知ヘルパー
+// ───────────────────────────────────────────
+
+/**
+ * 取引のステータスに応じた受信箱の通知文言を返す。
+ * itemTitle が渡されればタイトルを本文に含め、なければ汎用的な文言にフォールバックする。
+ */
+export function transactionNotificationText(
+  status: TransactionStatus,
+  itemTitle: string | null
+): string {
+  const title = itemTitle ? `「${itemTitle}」` : "取引";
+  switch (status) {
+    case "proposing":
+      return `${title}の取引が開始されました`;
+    case "scheduled":
+      return `${title}の日程が決定しました`;
+    case "completed":
+      return `${title}の取引が完了しました`;
+    case "canceled":
+      return `${title}の取引がキャンセルされました`;
+  }
+}
+
+/**
+ * 取引のステータスが終了（完了 or キャンセル）かどうかを判定する。
+ * 受信箱の「既読」表示に使う。
+ */
+export function isTransactionClosed(status: TransactionStatus): boolean {
+  return status === "completed" || status === "canceled";
+}
+
+// ───────────────────────────────────────────
+// API 関数
+// ───────────────────────────────────────────
+
+/**
+ * 認証ユーザーが関わる取引一覧を取得する（売り手・買い手どちらも含む）。
+ * 本物のAPIでは updated_at 降順で返ってくる。
+ */
+export async function getTransactions(): Promise<Transaction[]> {
+  if (MOCK_AUTH_ENABLED) {
+    return getMockTransactions();
+  }
+
+  const response = await apiFetch("/api/transactions");
+  return parseJsonResponse<Transaction[]>(response, "取引一覧の取得に失敗しました");
+}
 
 export async function createTransactionForItem(item: Item): Promise<Transaction> {
   if (MOCK_AUTH_ENABLED) {
@@ -229,6 +279,67 @@ async function parseJsonResponse<T>(response: Response, fallbackMessage: string)
   }
 
   return data as T;
+}
+
+// ───────────────────────────────────────────
+// モック実装（getTransactions 用）
+// ───────────────────────────────────────────
+
+const MOCK_TRANSACTIONS_STORAGE_KEY = "mock_api_transactions";
+
+const DEFAULT_MOCK_TRANSACTIONS: Transaction[] = [
+  {
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    item_id: "33333333-3333-4333-8333-333333333333",
+    seller_id: "22222222-2222-4222-8222-222222222222",
+    buyer_id: MOCK_USER_ID,
+    final_price: null,
+    status: "proposing",
+    meeting_datetime: null,
+    meeting_place: null,
+    seller_evaluated: false,
+    buyer_evaluated: false,
+    created_at: "2026-05-22T10:00:00.000Z",
+    updated_at: "2026-05-22T10:00:00.000Z",
+  },
+  {
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    item_id: "44444444-4444-4444-8444-444444444444",
+    seller_id: MOCK_USER_ID,
+    buyer_id: "33333333-3333-4333-8333-333333333333",
+    final_price: 300,
+    status: "scheduled",
+    meeting_datetime: "2026-05-30T14:00:00.000Z",
+    meeting_place: "理工学図書館前",
+    seller_evaluated: false,
+    buyer_evaluated: false,
+    created_at: "2026-05-21T09:00:00.000Z",
+    updated_at: "2026-05-21T15:00:00.000Z",
+  },
+];
+
+function readMockTransactions(): Transaction[] {
+  if (typeof window === "undefined") return [];
+  const raw = window.localStorage.getItem(MOCK_TRANSACTIONS_STORAGE_KEY);
+  if (!raw) {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(MOCK_TRANSACTIONS_STORAGE_KEY, JSON.stringify(DEFAULT_MOCK_TRANSACTIONS));
+    }
+    return DEFAULT_MOCK_TRANSACTIONS;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function getMockTransactions(): Transaction[] {
+  const transactions = readMockTransactions();
+  return [...transactions].sort(
+    (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+  );
 }
 
 function createMockTransactionForItem(item: Item): Transaction {
