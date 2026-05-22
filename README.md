@@ -25,6 +25,10 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
 
 The backend also requires `SUPABASE_JWT_SECRET` so it can verify `Authorization: Bearer <JWT>` from the frontend API client.
 
+Item image uploads use the public Supabase Storage bucket `item-images`. Apply
+`docs/migrations/20260523_create_item_images_storage_bucket.sql` to Supabase
+staging/production before testing real `/sell` uploads.
+
 Frontend authentication can be switched locally with `.env.local`:
 
 ```bash
@@ -36,6 +40,20 @@ NEXT_PUBLIC_AUTH_MOCK_ENABLED=true
 ```
 
 Protected frontend routes such as `/mypage`, `/sell`, `/transactions`, and `/inbox` are guarded by Next.js Proxy. Unauthenticated users are redirected to `/login?next=...`; `/signup` uses the same Supabase password auth flow and blocks non-`@osaka-u.ac.jp` email addresses before calling Supabase.
+
+For local user-flow verification without real Supabase Auth/Storage, use Mock Auth with a local database:
+
+```bash
+# 1. Start the backend with local mock token acceptance.
+cd backend
+npm run dev:mock
+
+# 2. In another terminal, start the frontend with mock auth.
+cd ../frontend
+npm run dev:mock
+```
+
+Mock Auth is guarded in code and works only in local development. The backend creates/updates the fixed mock user automatically when a mock-authenticated request reaches a protected API.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

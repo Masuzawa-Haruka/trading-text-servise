@@ -5,9 +5,11 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
+    "dev:mock": "ENABLE_MOCK_AUTH=true nodemon --watch src --ext ts --exec ts-node src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "node --test -r ts-node/register test/integration/*.test.ts test/unit/*.test.ts",
+    "test": "node --test -r ts-node/register test/integration/api-validation.test.ts test/unit/*.test.ts",
+    "test:db": "node --test -r ts-node/register test/integration/execute-cancellation.test.ts",
     "test:rls:staging": "RUN_STAGING_RLS_TESTS=1 node --test -r ts-node/register test/rls/*.test.ts"
   },
   "keywords": [],

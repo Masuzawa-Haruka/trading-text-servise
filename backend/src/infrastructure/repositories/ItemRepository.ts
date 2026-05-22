@@ -7,7 +7,7 @@
  */
 import { prisma } from '../../lib/prisma';
 import { IItemRepository } from '../../domain/repositories/IItemRepository';
-import { ItemEntity, CreateItemInput, GetItemsFilter, ItemStatus, ItemCondition } from '../../domain/item';
+import { ItemEntity, CreateItemInput, GetItemsFilter, ItemStatus, ItemCondition, Campus } from '../../domain/item';
 import { ItemImageEntity, CreateItemImagesInput } from '../../domain/item_image';
 import { Item, ItemImage } from '@prisma/client';
 
@@ -29,6 +29,8 @@ export class ItemRepository implements IItemRepository {
         author: input.author ?? null,
         description: input.description ?? null,
         condition: input.condition,
+        campus: input.campus,
+        handoff_location: input.handoff_location ?? null,
         category: input.category ?? null,
         price: input.price ?? 0,
       },
@@ -52,6 +54,8 @@ export class ItemRepository implements IItemRepository {
           author: itemInput.author ?? null,
           description: itemInput.description ?? null,
           condition: itemInput.condition,
+          campus: itemInput.campus,
+          handoff_location: itemInput.handoff_location ?? null,
           category: itemInput.category ?? null,
           price: itemInput.price ?? 0,
         },
@@ -83,7 +87,18 @@ export class ItemRepository implements IItemRepository {
   async findAll(filter: GetItemsFilter): Promise<ItemEntity[]> {
     const items = await prisma.item.findMany({
       where: {
-        ...(filter.category ? { category: filter.category } : {}),
+        ...(filter.q
+          ? {
+              OR: [
+                { title: { contains: filter.q, mode: 'insensitive' as const } },
+                { author: { contains: filter.q, mode: 'insensitive' as const } },
+                { description: { contains: filter.q, mode: 'insensitive' as const } },
+                { category: { contains: filter.q, mode: 'insensitive' as const } },
+              ],
+            }
+          : {}),
+        ...(filter.category ? { category: { contains: filter.category, mode: 'insensitive' as const } } : {}),
+        ...(filter.campus ? { campus: filter.campus } : {}),
         ...(filter.condition ? { condition: filter.condition } : {}),
         ...(filter.status ? { status: filter.status } : { status: 'available' }),
       },
@@ -157,6 +172,8 @@ export class ItemRepository implements IItemRepository {
       author: item.author,
       description: item.description,
       condition: item.condition.toString() as ItemCondition,
+      campus: item.campus.toString() as Campus,
+      handoff_location: item.handoff_location,
       category: item.category,
       price: item.price,
       status: item.status.toString() as ItemStatus,
