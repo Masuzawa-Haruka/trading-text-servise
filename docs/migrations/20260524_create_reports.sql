@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS reports (
     CONSTRAINT reports_reporter_not_reported CHECK (reporter_id <> reported_user_id)
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS reports_transaction_reporter_unique
+ON reports (transaction_id, reporter_id);
+
 ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Reporters can view own reports" ON reports;

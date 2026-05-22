@@ -139,7 +139,8 @@ CREATE TABLE reports (
     detail TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT reports_reporter_not_reported CHECK (reporter_id <> reported_user_id)
+    CONSTRAINT reports_reporter_not_reported CHECK (reporter_id <> reported_user_id),
+    CONSTRAINT reports_transaction_reporter_unique UNIQUE (transaction_id, reporter_id)
 );
 
 -- 9. Notifications

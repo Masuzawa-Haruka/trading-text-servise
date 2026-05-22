@@ -274,6 +274,7 @@ model Report {
   created_at       DateTime    @default(now())
   updated_at       DateTime    @updatedAt
 
+  @@unique([transaction_id, reporter_id], map: "reports_transaction_reporter_unique")
   @@map("reports")
 }
 

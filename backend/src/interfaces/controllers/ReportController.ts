@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth';
 import { SubmitReportUseCase } from '../../usecases/SubmitReportUseCase';
-import { ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors';
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors';
 import { isValidUuid } from '../../lib/validation';
 
 const REPORT_REASONS = new Set(['user_behavior', 'fake_item', 'fraud', 'cancel', 'other']);
@@ -78,6 +78,10 @@ export class ReportController {
     }
     if (error instanceof ValidationError) {
       res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error instanceof ConflictError) {
+      res.status(409).json({ error: error.message });
       return;
     }
     res.status(500).json({ error: 'サーバーエラーが発生しました' });

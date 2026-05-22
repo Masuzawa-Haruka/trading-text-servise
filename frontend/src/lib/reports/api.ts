@@ -52,8 +52,17 @@ function createMockReport(payload: SubmitReportPayload): Report {
     return buildMockReport(payload);
   }
 
-  const report = buildMockReport(payload);
   const reports = readMockReports();
+  if (
+    reports.some(
+      (report) =>
+        report.transaction_id === payload.transaction_id && report.reporter_id === MOCK_USER_ID,
+    )
+  ) {
+    throw new Error("この取引はすでに通報済みです");
+  }
+
+  const report = buildMockReport(payload);
   window.localStorage.setItem(MOCK_REPORTS_STORAGE_KEY, JSON.stringify([report, ...reports]));
   return report;
 }

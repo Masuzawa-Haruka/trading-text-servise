@@ -7,6 +7,7 @@ import { ScheduleProposalController } from '../../src/interfaces/controllers/Sch
 import { CancellationController } from '../../src/interfaces/controllers/CancellationController';
 import { UserController } from '../../src/interfaces/controllers/UserController';
 import { ReportController } from '../../src/interfaces/controllers/ReportController';
+import { ConflictError } from '../../src/domain/errors';
 
 const JWT_SECRET = 'integration-test-secret';
 const AUTH_USER_ID = '11111111-1111-4111-8111-111111111111';
@@ -447,6 +448,29 @@ test('POST /api/reports trims detail and passes report to usecase', async () => 
   ]);
 });
 
+test('POST /api/reports maps duplicate reports to 409', async () => {
+  const handler = createReportHandler({
+    execute: async () => {
+      throw new ConflictError('この取引はすでに通報済みです');
+    },
+  });
+
+  const response = await withoutConsoleError(() =>
+    request(handler, {
+      token: authToken(),
+      body: {
+        transaction_id: TRANSACTION_ID,
+        reported_user_id: REPORTED_USER_ID,
+        reason: 'fraud',
+        detail: '代金トラブルがありました',
+      },
+    }),
+  );
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(response.body, { error: 'この取引はすでに通報済みです' });
+});
+
 function createItemHandler(createItemUseCase: { execute: (...args: any[]) => Promise<unknown> }): TestHandler {
   const controller = new ItemController(
     createItemUseCase as any,
@@ -564,4 +588,14 @@ function createMockResponse(): MockResponse {
       return this;
     },
   };
+}
+
+async function withoutConsoleError<T>(callback: () => Promise<T>): Promise<T> {
+  const original = console.error;
+  console.error = () => undefined;
+  try {
+    return await callback();
+  } finally {
+    console.error = original;
+  }
 }

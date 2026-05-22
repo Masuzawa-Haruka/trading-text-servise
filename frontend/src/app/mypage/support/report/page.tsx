@@ -118,6 +118,24 @@ export default function ReportPage() {
     setTargetUserId("");
   };
 
+  const handleTargetUserChange = (userId: string) => {
+    setTargetUserId(userId);
+    setSubmitError(null);
+    if (!userId || !currentUserId || !transactionItem) {
+      return;
+    }
+
+    const selectedTransaction = userTransactions.find((entry) => entry.tx.id === transactionItem)?.tx;
+    const selectedCounterpartyId =
+      selectedTransaction?.buyer_id === currentUserId
+        ? selectedTransaction.seller_id
+        : selectedTransaction?.buyer_id;
+
+    if (selectedCounterpartyId !== userId) {
+      setTransactionItem("");
+    }
+  };
+
   const handleSubmit = async () => {
     if (!selectedType || !transactionItem || !targetUserId || !details.trim()) {
       setSubmitError("通報に必要な項目が不足しています");
@@ -144,6 +162,13 @@ export default function ReportPage() {
 
   const selectedTargetUserName =
     relatedUsers.find((user) => user.id === targetUserId)?.nickname ?? "";
+  const filteredUserTransactions = targetUserId
+    ? userTransactions.filter(({ tx }) => {
+        if (!currentUserId) return false;
+        const counterpartyId = tx.buyer_id === currentUserId ? tx.seller_id : tx.buyer_id;
+        return counterpartyId === targetUserId;
+      })
+    : userTransactions;
 
   return (
     <main className="mx-auto min-h-dvh max-w-[430px] bg-white pb-24 text-slate-900">
@@ -268,7 +293,7 @@ export default function ReportPage() {
               </label>
               <select
                 value={targetUserId}
-                onChange={(e) => setTargetUserId(e.target.value)}
+                onChange={(e) => handleTargetUserChange(e.target.value)}
                 className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
               >
                 <option value="">{loadingTransactions ? "読み込み中..." : "対象ユーザーを選択"}</option>
@@ -289,7 +314,7 @@ export default function ReportPage() {
                 className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
               >
                 <option value="">{loadingTransactions ? "読み込み中..." : "取引を選択"}</option>
-                {userTransactions.map(({tx, itemTitle}) => (
+                {filteredUserTransactions.map(({tx, itemTitle}) => (
                   <option key={tx.id} value={tx.id}>{itemTitle} ({statusLabel(tx.status)})</option>
                 ))}
               </select>
