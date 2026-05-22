@@ -8,6 +8,7 @@ export type SubmitReportInput = {
   reported_user_id: string;
   reason: string;
   detail: string;
+  evidence_image_urls?: string[];
 };
 
 export class SubmitReportUseCase {
@@ -36,6 +37,7 @@ export class SubmitReportUseCase {
     return this.reportRepository.create({
       ...input,
       reporter_id: reporterId,
+      evidence_image_urls: input.evidence_image_urls ?? [],
     });
   }
 }

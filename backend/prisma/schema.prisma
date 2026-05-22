@@ -271,6 +271,7 @@ model Report {
   reportedUser     User        @relation("ReportedReports", fields: [reported_user_id], references: [id], onDelete: Cascade)
   reason           String
   detail           String
+  evidence_image_urls String[] @default([])
   created_at       DateTime    @default(now())
   updated_at       DateTime    @updatedAt
 
