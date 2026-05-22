@@ -14,6 +14,7 @@ export class ReportRepository implements IReportRepository {
           reported_user_id: input.reported_user_id,
           reason: input.reason,
           detail: input.detail,
+          evidence_image_urls: input.evidence_image_urls,
         },
       });
     } catch (error) {

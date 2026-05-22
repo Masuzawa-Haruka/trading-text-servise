@@ -5,6 +5,7 @@ export type ReportEntity = {
   reported_user_id: string;
   reason: string;
   detail: string;
+  evidence_image_urls: string[];
   created_at: Date;
   updated_at: Date;
 };
@@ -15,4 +16,5 @@ export type CreateReportInput = {
   reported_user_id: string;
   reason: string;
   detail: string;
+  evidence_image_urls: string[];
 };

@@ -137,9 +137,11 @@ CREATE TABLE reports (
     reported_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     reason VARCHAR NOT NULL,
     detail TEXT NOT NULL,
+    evidence_image_urls TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT reports_reporter_not_reported CHECK (reporter_id <> reported_user_id),
+    CONSTRAINT reports_evidence_image_urls_limit CHECK (cardinality(evidence_image_urls) <= 5),
     CONSTRAINT reports_transaction_reporter_unique UNIQUE (transaction_id, reporter_id)
 );
 

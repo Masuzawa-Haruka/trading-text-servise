@@ -420,6 +420,7 @@ test('POST /api/reports trims detail and passes report to usecase', async () => 
         reported_user_id: REPORTED_USER_ID,
         reason: 'fraud',
         detail: '代金トラブルがありました',
+        evidence_image_urls: ['https://example.com/evidence-1.png'],
         created_at: new Date('2026-05-20T00:00:00.000Z'),
         updated_at: new Date('2026-05-20T00:00:00.000Z'),
       };
@@ -433,6 +434,7 @@ test('POST /api/reports trims detail and passes report to usecase', async () => 
       reported_user_id: REPORTED_USER_ID,
       reason: 'fraud',
       detail: ' 代金トラブルがありました ',
+      evidence_image_urls: [' https://example.com/evidence-1.png '],
     },
   });
 
@@ -443,9 +445,67 @@ test('POST /api/reports trims detail and passes report to usecase', async () => 
       reported_user_id: REPORTED_USER_ID,
       reason: 'fraud',
       detail: '代金トラブルがありました',
+      evidence_image_urls: ['https://example.com/evidence-1.png'],
     },
     AUTH_USER_ID,
   ]);
+});
+
+test('POST /api/reports rejects invalid evidence image URLs before usecase execution', async () => {
+  let called = false;
+  const handler = createReportHandler({
+    execute: async () => {
+      called = true;
+      throw new Error('should not be called');
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+    body: {
+      transaction_id: TRANSACTION_ID,
+      reported_user_id: REPORTED_USER_ID,
+      reason: 'fraud',
+      detail: '代金トラブルがありました',
+      evidence_image_urls: ['javascript:alert(1)'],
+    },
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(response.body, { error: '証拠画像URLはHTTP(S)のURLで指定してください' });
+  assert.equal(called, false);
+});
+
+test('POST /api/reports rejects more than 5 evidence images before usecase execution', async () => {
+  let called = false;
+  const handler = createReportHandler({
+    execute: async () => {
+      called = true;
+      throw new Error('should not be called');
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+    body: {
+      transaction_id: TRANSACTION_ID,
+      reported_user_id: REPORTED_USER_ID,
+      reason: 'fraud',
+      detail: '代金トラブルがありました',
+      evidence_image_urls: [
+        'https://example.com/evidence-1.png',
+        'https://example.com/evidence-2.png',
+        'https://example.com/evidence-3.png',
+        'https://example.com/evidence-4.png',
+        'https://example.com/evidence-5.png',
+        'https://example.com/evidence-6.png',
+      ],
+    },
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(response.body, { error: '証拠画像は最大5枚まで添付できます' });
+  assert.equal(called, false);
 });
 
 test('POST /api/reports maps duplicate reports to 409', async () => {

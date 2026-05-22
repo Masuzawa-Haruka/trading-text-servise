@@ -47,6 +47,7 @@ test('SubmitReportUseCase creates a report when reporter is a transaction party 
     reported_user_id: ids.seller,
     reason: 'fraud',
     detail: '代金トラブルがありました',
+    evidence_image_urls: [],
   });
 });
 
