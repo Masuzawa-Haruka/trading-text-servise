@@ -11,6 +11,7 @@ import scheduleProposalRoutes from './infrastructure/routes/scheduleProposalRout
 import messageRoutes from './infrastructure/routes/messageRoutes';
 import evaluationRoutes from './infrastructure/routes/evaluationRoutes';
 import cancellationRoutes from './infrastructure/routes/cancellationRoutes';
+import reportRoutes from './infrastructure/routes/reportRoutes';
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -30,6 +31,7 @@ app.use('/api/schedule-proposals', scheduleProposalRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/evaluations', evaluationRoutes);
 app.use('/api/cancellations', cancellationRoutes);
+app.use('/api/reports', reportRoutes);
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);

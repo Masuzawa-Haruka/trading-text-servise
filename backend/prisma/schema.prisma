@@ -90,6 +90,8 @@ model User {
   cancellationsSent CancellationRequest[] @relation("RequesterCancellations")
   evaluationsTarget Evaluation[]       @relation("TargetEvaluations")
   evaluationsGiven  Evaluation[]       @relation("ReviewerEvaluations")
+  reportsSubmitted  Report[]           @relation("ReporterReports")
+  reportsReceived   Report[]           @relation("ReportedReports")
   notifications     Notification[]     @relation("ReceiverNotifications")
   actorNotifications Notification[]    @relation("ActorNotifications")
 
@@ -153,6 +155,7 @@ model Transaction {
   cancellations CancellationRequest[]
   messages    Message[]
   evaluations Evaluation[]
+  reports     Report[]
 
   @@map("transactions")
 }
@@ -256,6 +259,22 @@ model Evaluation {
   updated_at     DateTime       @updatedAt
 
   @@map("evaluations")
+}
+
+model Report {
+  id               String      @id @default(uuid()) @db.Uuid
+  transaction_id   String      @db.Uuid
+  transaction      Transaction @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  reporter_id      String      @db.Uuid
+  reporter         User        @relation("ReporterReports", fields: [reporter_id], references: [id], onDelete: Cascade)
+  reported_user_id String      @db.Uuid
+  reportedUser     User        @relation("ReportedReports", fields: [reported_user_id], references: [id], onDelete: Cascade)
+  reason           String
+  detail           String
+  created_at       DateTime    @default(now())
+  updated_at       DateTime    @updatedAt
+
+  @@map("reports")
 }
 
 model Notification {
