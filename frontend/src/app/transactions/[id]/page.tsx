@@ -8,6 +8,7 @@ import { getItem, type Item } from "@/lib/items/api";
 import { mockStore, type MockLocation } from "@/lib/mockStore";
 import { createClient } from "@/lib/supabase/client";
 import {
+  executeCancellation,
   getScheduleProposals,
   getTransaction,
   getTransactionMessages,
@@ -50,6 +51,8 @@ export default function TransactionPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
   const [selectedArea, setSelectedArea] = useState("");
   const [candidates, setCandidates] = useState<Candidate[]>([
     { date: "", time: "", locationId: "" },
@@ -184,7 +187,25 @@ export default function TransactionPage() {
     }
 
     if (action === "cancel") {
-      setError("キャンセル実行はキャンセルAPI結合のPRで接続します");
+      setShowCancelModal(true);
+    }
+  }
+
+  async function submitCancellation() {
+    if (!transaction || isSubmitting) return;
+
+    const normalizedReason = cancelReason.trim();
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await executeCancellation(transaction, normalizedReason || undefined);
+      setShowCancelModal(false);
+      setCancelReason("");
+      await loadData();
+    } catch (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : "キャンセル実行に失敗しました");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -545,6 +566,65 @@ export default function TransactionPage() {
                 className="w-full rounded-full bg-[#0047c7] py-3 text-sm font-bold text-white shadow-md disabled:opacity-50"
               >
                 提案を送信する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCancelModal && (
+        <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/40">
+          <div className="w-full max-w-[430px] rounded-t-2xl bg-white">
+            <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <h2 className="text-sm font-bold text-slate-900">取引をキャンセル</h2>
+              <button
+                onClick={() => setShowCancelModal(false)}
+                className="text-2xl leading-none text-slate-400"
+                disabled={isSubmitting}
+              >
+                &times;
+              </button>
+            </header>
+
+            <div className="space-y-4 p-4">
+              {error && (
+                <div className="rounded-lg bg-red-50 p-3 text-xs font-bold text-red-700">
+                  {error}
+                </div>
+              )}
+
+              <div className="rounded-lg bg-red-50 p-3 text-xs font-bold leading-relaxed text-red-700">
+                キャンセルすると取引は中止され、出品は再び公開されます。実行者には信用スコアのペナルティが適用されます。
+              </div>
+
+              <label className="block text-xs font-bold text-slate-600">
+                理由（任意）
+                <textarea
+                  value={cancelReason}
+                  onChange={(event) => setCancelReason(event.target.value)}
+                  rows={4}
+                  maxLength={500}
+                  placeholder="例: 予定が合わなくなったため"
+                  className="mt-2 w-full resize-none rounded-lg border border-slate-300 bg-white p-3 text-sm text-slate-900 outline-none focus:border-[#0047c7]"
+                  disabled={isSubmitting}
+                />
+              </label>
+            </div>
+
+            <div className="flex gap-2 border-t border-slate-100 p-4">
+              <button
+                onClick={() => setShowCancelModal(false)}
+                disabled={isSubmitting}
+                className="flex-1 rounded-full bg-slate-100 py-3 text-sm font-bold text-slate-700 disabled:opacity-50"
+              >
+                戻る
+              </button>
+              <button
+                onClick={submitCancellation}
+                disabled={isSubmitting}
+                className="flex-1 rounded-full bg-red-600 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50"
+              >
+                キャンセルする
               </button>
             </div>
           </div>
