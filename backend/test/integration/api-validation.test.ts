@@ -6,12 +6,14 @@ import { ItemController } from '../../src/interfaces/controllers/ItemController'
 import { ScheduleProposalController } from '../../src/interfaces/controllers/ScheduleProposalController';
 import { CancellationController } from '../../src/interfaces/controllers/CancellationController';
 import { UserController } from '../../src/interfaces/controllers/UserController';
+import { ReportController } from '../../src/interfaces/controllers/ReportController';
 
 const JWT_SECRET = 'integration-test-secret';
 const AUTH_USER_ID = '11111111-1111-4111-8111-111111111111';
 const TRANSACTION_ID = '22222222-2222-4222-8222-222222222222';
 const PROPOSAL_ID = '33333333-3333-4333-8333-333333333333';
 const CANDIDATE_ID = '44444444-4444-4444-8444-444444444444';
+const REPORTED_USER_ID = '55555555-5555-4555-8555-555555555555';
 
 let previousJwtSecret: string | undefined;
 
@@ -333,6 +335,118 @@ test('PATCH /api/users/me trims nickname and accepts nullable profile image URL'
   ]);
 });
 
+test('POST /api/reports rejects invalid transaction_id before usecase execution', async () => {
+  let called = false;
+  const handler = createReportHandler({
+    execute: async () => {
+      called = true;
+      throw new Error('should not be called');
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+    body: {
+      transaction_id: 'not-a-uuid',
+      reported_user_id: REPORTED_USER_ID,
+      reason: 'fraud',
+      detail: '代金トラブルがありました',
+    },
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(response.body, { error: '無効な取引ID形式です' });
+  assert.equal(called, false);
+});
+
+test('POST /api/reports rejects invalid reported_user_id before usecase execution', async () => {
+  let called = false;
+  const handler = createReportHandler({
+    execute: async () => {
+      called = true;
+      throw new Error('should not be called');
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+    body: {
+      transaction_id: TRANSACTION_ID,
+      reported_user_id: 'bad-user-id',
+      reason: 'fraud',
+      detail: '代金トラブルがありました',
+    },
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(response.body, { error: '無効な対象ユーザーID形式です' });
+  assert.equal(called, false);
+});
+
+test('POST /api/reports rejects unknown reason before usecase execution', async () => {
+  let called = false;
+  const handler = createReportHandler({
+    execute: async () => {
+      called = true;
+      throw new Error('should not be called');
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+    body: {
+      transaction_id: TRANSACTION_ID,
+      reported_user_id: REPORTED_USER_ID,
+      reason: 'unknown',
+      detail: '代金トラブルがありました',
+    },
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(response.body, { error: '通報内容を選択してください' });
+  assert.equal(called, false);
+});
+
+test('POST /api/reports trims detail and passes report to usecase', async () => {
+  let capturedArgs: unknown;
+  const handler = createReportHandler({
+    execute: async (...args: unknown[]) => {
+      capturedArgs = args;
+      return {
+        id: '66666666-6666-4666-8666-666666666666',
+        transaction_id: TRANSACTION_ID,
+        reporter_id: AUTH_USER_ID,
+        reported_user_id: REPORTED_USER_ID,
+        reason: 'fraud',
+        detail: '代金トラブルがありました',
+        created_at: new Date('2026-05-20T00:00:00.000Z'),
+        updated_at: new Date('2026-05-20T00:00:00.000Z'),
+      };
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+    body: {
+      transaction_id: TRANSACTION_ID,
+      reported_user_id: REPORTED_USER_ID,
+      reason: 'fraud',
+      detail: ' 代金トラブルがありました ',
+    },
+  });
+
+  assert.equal(response.status, 201);
+  assert.deepEqual(capturedArgs, [
+    {
+      transaction_id: TRANSACTION_ID,
+      reported_user_id: REPORTED_USER_ID,
+      reason: 'fraud',
+      detail: '代金トラブルがありました',
+    },
+    AUTH_USER_ID,
+  ]);
+});
+
 function createItemHandler(createItemUseCase: { execute: (...args: any[]) => Promise<unknown> }): TestHandler {
   const controller = new ItemController(
     createItemUseCase as any,
@@ -377,6 +491,14 @@ function createUserUpdateHandler(
   );
 
   return controller.updateMe as unknown as TestHandler;
+}
+
+function createReportHandler(
+  submitReportUseCase: { execute: (...args: any[]) => Promise<unknown> },
+): TestHandler {
+  const controller = new ReportController(submitReportUseCase as any);
+
+  return controller.submitReport.bind(controller) as unknown as TestHandler;
 }
 
 function authToken(options: { email?: string } = {}): string {
