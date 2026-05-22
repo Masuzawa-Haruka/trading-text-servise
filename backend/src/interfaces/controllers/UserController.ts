@@ -48,6 +48,11 @@ export class UserController {
       }
 
       const { nickname, profile_image_url } = req.body;
+      if (nickname === undefined && profile_image_url === undefined) {
+        res.status(400).json({ error: '更新するフィールドを指定してください' });
+        return;
+      }
+
       const input: { nickname?: string; profile_image_url?: string | null } = {};
 
       if (nickname !== undefined) {

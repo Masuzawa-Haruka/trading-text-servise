@@ -281,6 +281,25 @@ test('PATCH /api/users/me rejects invalid nickname before usecase execution', as
   assert.equal(called, false);
 });
 
+test('PATCH /api/users/me rejects empty update before usecase execution', async () => {
+  let called = false;
+  const handler = createUserUpdateHandler({
+    execute: async () => {
+      called = true;
+      throw new Error('should not be called');
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+    body: {},
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(response.body, { error: '更新するフィールドを指定してください' });
+  assert.equal(called, false);
+});
+
 test('PATCH /api/users/me trims nickname and accepts nullable profile image URL', async () => {
   let capturedArgs: unknown;
   const handler = createUserUpdateHandler({
