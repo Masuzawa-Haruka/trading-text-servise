@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { MOCK_AUTH_ENABLED } from "@/lib/auth/mock";
 import { createClient } from "@/lib/supabase/client";
 
 export const ITEM_IMAGE_BUCKET = "item-images";
@@ -91,6 +92,10 @@ export async function uploadItemImages(files: File[]): Promise<string[]> {
     return [];
   }
 
+  if (MOCK_AUTH_ENABLED) {
+    return Promise.all(files.map(fileToDataUrl));
+  }
+
   const supabase = createClient();
   const {
     data: { user },
@@ -164,4 +169,19 @@ async function parseJsonResponse<T>(response: Response, fallbackMessage: string)
 function getFileExtension(fileName: string): string {
   const match = fileName.match(/\.[a-zA-Z0-9]+$/);
   return match ? match[0].toLowerCase() : "";
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("画像の読み込みに失敗しました"));
+    });
+    reader.addEventListener("error", () => reject(new Error("画像の読み込みに失敗しました")));
+    reader.readAsDataURL(file);
+  });
 }

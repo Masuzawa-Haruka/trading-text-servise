@@ -1,7 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { prisma } from '../lib/prisma';
 
 const ALLOWED_EMAIL_DOMAIN = '@osaka-u.ac.jp';
+const MOCK_ACCESS_TOKEN = 'mock-access-token';
+const MOCK_USER_ID = '11111111-1111-4111-8111-111111111111';
+const MOCK_USER_EMAIL = 'mock-user@osaka-u.ac.jp';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -11,12 +15,29 @@ export interface AuthRequest extends Request {
   };
 }
 
-export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const token = extractBearerToken(req.headers.authorization);
 
   if (!token) {
     res.status(401).json({ error: '認証トークンが必要です' });
     return;
+  }
+
+  if (isLocalMockAuthToken(token)) {
+    try {
+      await ensureMockUser();
+      req.user = {
+        id: MOCK_USER_ID,
+        email: MOCK_USER_EMAIL,
+        role: 'authenticated',
+      };
+      next();
+      return;
+    } catch (error) {
+      console.error('Failed to prepare mock user', error);
+      res.status(500).json({ error: 'Mockユーザーの準備に失敗しました' });
+      return;
+    }
   }
 
   const secret = process.env.SUPABASE_JWT_SECRET;
@@ -52,6 +73,33 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
     res.status(403).json({ error: '無効なトークンです' });
   }
 };
+
+function isLocalMockAuthToken(token: string): boolean {
+  return (
+    token === MOCK_ACCESS_TOKEN &&
+    process.env.ENABLE_MOCK_AUTH === 'true' &&
+    process.env.NODE_ENV !== 'production' &&
+    process.env.VERCEL_ENV === undefined
+  );
+}
+
+async function ensureMockUser(): Promise<void> {
+  await prisma.user.upsert({
+    where: { id: MOCK_USER_ID },
+    create: {
+      id: MOCK_USER_ID,
+      email: MOCK_USER_EMAIL,
+      nickname: '大阪 太郎',
+      credit_score: 100,
+      status: 'active',
+    },
+    update: {
+      email: MOCK_USER_EMAIL,
+      nickname: '大阪 太郎',
+      status: 'active',
+    },
+  });
+}
 
 export function isAllowedUniversityEmail(email: string | undefined): boolean {
   return Boolean(email && email.toLowerCase().endsWith(ALLOWED_EMAIL_DOMAIN));
