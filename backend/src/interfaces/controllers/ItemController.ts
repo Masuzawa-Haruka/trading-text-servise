@@ -140,11 +140,7 @@ export class ItemController {
         res.status(400).json({ error: 'handoff_location は文字列で指定してください' });
         return;
       }
-      if (!normalizedHandoffLocation) {
-        res.status(400).json({ error: 'handoff_location は空でない文字列で指定してください' });
-        return;
-      }
-      if (normalizedHandoffLocation.length > 100) {
+      if (normalizedHandoffLocation !== undefined && normalizedHandoffLocation.length > 100) {
         res.status(400).json({ error: 'handoff_location は100文字以内で指定してください' });
         return;
       }
