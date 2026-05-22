@@ -5,6 +5,7 @@ import { authenticateToken, AuthRequest, extractBearerToken } from '../../src/mi
 import { ItemController } from '../../src/interfaces/controllers/ItemController';
 import { ScheduleProposalController } from '../../src/interfaces/controllers/ScheduleProposalController';
 import { CancellationController } from '../../src/interfaces/controllers/CancellationController';
+import { UserController } from '../../src/interfaces/controllers/UserController';
 
 const JWT_SECRET = 'integration-test-secret';
 const AUTH_USER_ID = '11111111-1111-4111-8111-111111111111';
@@ -259,6 +260,79 @@ test('POST /api/cancellations/execute rejects invalid reason before usecase exec
   assert.equal(called, false);
 });
 
+test('PATCH /api/users/me rejects invalid nickname before usecase execution', async () => {
+  let called = false;
+  const handler = createUserUpdateHandler({
+    execute: async () => {
+      called = true;
+      throw new Error('should not be called');
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+    body: {
+      nickname: '   ',
+    },
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(response.body, { error: 'nickname は1文字以上50文字以内で指定してください' });
+  assert.equal(called, false);
+});
+
+test('PATCH /api/users/me rejects empty update before usecase execution', async () => {
+  let called = false;
+  const handler = createUserUpdateHandler({
+    execute: async () => {
+      called = true;
+      throw new Error('should not be called');
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+    body: {},
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(response.body, { error: '更新するフィールドを指定してください' });
+  assert.equal(called, false);
+});
+
+test('PATCH /api/users/me trims nickname and accepts nullable profile image URL', async () => {
+  let capturedArgs: unknown;
+  const handler = createUserUpdateHandler({
+    execute: async (...args: unknown[]) => {
+      capturedArgs = args;
+      return {
+        id: AUTH_USER_ID,
+        email: 'test@osaka-u.ac.jp',
+        nickname: '阪大 太郎',
+        profile_image_url: null,
+        credit_score: 100,
+        status: 'active',
+        created_at: new Date('2026-05-20T00:00:00.000Z'),
+        updated_at: new Date('2026-05-20T00:00:00.000Z'),
+      };
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+    body: {
+      nickname: ' 阪大 太郎 ',
+      profile_image_url: '',
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(capturedArgs, [
+    AUTH_USER_ID,
+    { nickname: '阪大 太郎', profile_image_url: null },
+  ]);
+});
+
 function createItemHandler(createItemUseCase: { execute: (...args: any[]) => Promise<unknown> }): TestHandler {
   const controller = new ItemController(
     createItemUseCase as any,
@@ -291,6 +365,18 @@ function createCancellationHandler(
   );
 
   return controller.executeCancellation.bind(controller) as unknown as TestHandler;
+}
+
+function createUserUpdateHandler(
+  updateMyProfileUseCase: { execute: (...args: any[]) => Promise<unknown> },
+): TestHandler {
+  const controller = new UserController(
+    { execute: async () => [] } as any,
+    { execute: async () => null } as any,
+    updateMyProfileUseCase as any,
+  );
+
+  return controller.updateMe as unknown as TestHandler;
 }
 
 function authToken(options: { email?: string } = {}): string {

@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { mockStore, MockTransaction, MockItem } from "@/lib/mockStore";
+import { getTransactions, type Transaction } from "@/lib/transactions/api";
+import { getMyProfile } from "@/lib/users/api";
 
 type ReportType = {
   id: string;
@@ -25,34 +26,58 @@ export default function ReportPage() {
   const [targetUser, setTargetUser] = useState("");
   const [transactionItem, setTransactionItem] = useState("");
   const [details, setDetails] = useState("");
-  const [userTransactions, setUserTransactions] = useState<{tx: MockTransaction, item: MockItem}[]>([]);
+  const [userTransactions, setUserTransactions] = useState<{ tx: Transaction; itemTitle: string }[]>([]);
   const [relatedUsers, setRelatedUsers] = useState<{ id: string; nickname: string }[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [loadingTransactions, setLoadingTransactions] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    const user = mockStore.currentUser;
-    const allTxs = mockStore.getTransactions();
-    const relevantTxs = allTxs.filter(tx => tx.buyerId === user.id || tx.sellerId === user.id);
-    
-    const txsWithItems = relevantTxs.map(tx => {
-      const item = mockStore.getItem(tx.itemId);
-      return { tx, item: item! };
-    }).filter(t => t.item); // Ensure item exists
-    
-    setUserTransactions(txsWithItems);
+    let ignore = false;
 
-    // Get unique related users
-    const usersMap = new Map<string, string>();
-    relevantTxs.forEach(tx => {
-      const counterpartyId = tx.buyerId === user.id ? tx.sellerId : tx.buyerId;
-      const counterparty = mockStore.getUser(counterpartyId);
-      if (counterparty) {
-        usersMap.set(counterparty.id, counterparty.nickname);
+    async function loadReportContext() {
+      try {
+        const [profile, transactions] = await Promise.all([
+          getMyProfile(),
+          getTransactions(),
+        ]);
+        const txsWithItems = transactions.map((tx) => ({
+          tx,
+          itemTitle: tx.item_title ?? "取引中の参考書",
+        }));
+
+        const usersMap = new Map<string, string>();
+        transactions.forEach((tx) => {
+          const counterpartyId = tx.buyer_id === profile.id ? tx.seller_id : tx.buyer_id;
+          usersMap.set(counterpartyId, `相手ユーザー（${counterpartyId.slice(0, 8)}）`);
+        });
+
+        if (!ignore) {
+          setCurrentUserId(profile.id);
+          setUserTransactions(txsWithItems);
+          setRelatedUsers(Array.from(usersMap.entries()).map(([id, nickname]) => ({ id, nickname })));
+        }
+      } catch (caughtError) {
+        if (!ignore) {
+          if (caughtError instanceof Error && caughtError.message === "ログインが必要です") {
+            router.replace("/login");
+            return;
+          }
+          setLoadError("関連する取引を取得できませんでした");
+        }
+      } finally {
+        if (!ignore) {
+          setLoadingTransactions(false);
+        }
       }
-    });
+    }
 
-    const uniqueUsers = Array.from(usersMap.entries()).map(([id, nickname]) => ({ id, nickname }));
-    setRelatedUsers(uniqueUsers);
-  }, []);
+    void loadReportContext();
+
+    return () => {
+      ignore = true;
+    };
+  }, [router]);
 
   const handleNext = () => {
     if (!selectedType) {
@@ -74,13 +99,10 @@ export default function ReportPage() {
     setTransactionItem(txId);
     if (txId) {
       const tx = userTransactions.find(t => t.tx.id === txId)?.tx;
-      if (tx) {
-        const user = mockStore.currentUser;
-        const counterpartyId = tx.buyerId === user.id ? tx.sellerId : tx.buyerId;
-        const counterparty = mockStore.getUser(counterpartyId);
-        if (counterparty) {
-          setTargetUser(counterparty.nickname); // Auto-fill target user
-        }
+      if (tx && currentUserId) {
+        const counterpartyId = tx.buyer_id === currentUserId ? tx.seller_id : tx.buyer_id;
+        const counterparty = relatedUsers.find((user) => user.id === counterpartyId);
+        setTargetUser(counterparty?.nickname ?? "");
       }
     }
   };
@@ -187,6 +209,12 @@ export default function ReportPage() {
 
       {step === 2 && (
         <div className="px-4 py-6">
+          {loadError ? (
+            <div className="mb-4 rounded-lg bg-red-50 px-3 py-2">
+              <p className="text-xs font-bold text-red-600">{loadError}</p>
+            </div>
+          ) : null}
+
           <div className="mb-6">
             <h3 className="text-sm font-bold text-slate-700 mb-2">通報内容</h3>
             <div className="flex items-center gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50">
@@ -210,7 +238,7 @@ export default function ReportPage() {
                 onChange={(e) => setTargetUser(e.target.value)}
                 className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
               >
-                <option value="">対象ユーザーを選択</option>
+                <option value="">{loadingTransactions ? "読み込み中..." : "対象ユーザーを選択"}</option>
                 {relatedUsers.map((u) => (
                   <option key={u.id} value={u.nickname}>{u.nickname}</option>
                 ))}
@@ -227,9 +255,9 @@ export default function ReportPage() {
                 onChange={(e) => handleTransactionChange(e.target.value)}
                 className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
               >
-                <option value="">取引を選択</option>
-                {userTransactions.map(({tx, item}) => (
-                  <option key={tx.id} value={tx.id}>{item.title} ({tx.status})</option>
+                <option value="">{loadingTransactions ? "読み込み中..." : "取引を選択"}</option>
+                {userTransactions.map(({tx, itemTitle}) => (
+                  <option key={tx.id} value={tx.id}>{itemTitle} ({statusLabel(tx.status)})</option>
                 ))}
               </select>
               <p className="mt-1 text-[10px] text-slate-500">※関連する取引がある場合は選択してください</p>
@@ -303,7 +331,7 @@ export default function ReportPage() {
             <div className="border-b border-slate-100 pb-3">
               <h3 className="text-xs font-bold text-slate-500 mb-1">取引する教科書</h3>
               <p className="text-sm font-bold text-slate-900">
-                {transactionItem ? (userTransactions.find(t => t.tx.id === transactionItem)?.item.title || "選択された取引") : "なし"}
+                {transactionItem ? (userTransactions.find(t => t.tx.id === transactionItem)?.itemTitle || "選択された取引") : "なし"}
               </p>
             </div>
 
@@ -345,4 +373,14 @@ export default function ReportPage() {
       )}
     </main>
   );
+}
+
+function statusLabel(status: Transaction["status"]): string {
+  const labels: Record<Transaction["status"], string> = {
+    proposing: "提案中",
+    scheduled: "予定確定",
+    completed: "完了",
+    canceled: "キャンセル",
+  };
+  return labels[status];
 }
