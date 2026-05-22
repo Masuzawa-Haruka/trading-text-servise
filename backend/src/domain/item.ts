@@ -60,6 +60,7 @@ export interface CreateItemInput {
  * クエリパラメータ（?category=xxx&condition=xxx）として受け取る。
  */
 export interface GetItemsFilter {
+  q?: string;
   category?: string;
   condition?: ItemCondition;
   status?: ItemStatus;

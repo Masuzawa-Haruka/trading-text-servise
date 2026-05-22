@@ -32,7 +32,7 @@ export class ItemController {
 
   /**
    * GET /api/items
-   * クエリパラメータ（category, condition, status）でフィルタした出品一覧を返す。
+   * クエリパラメータ（q, category, condition, status）でフィルタした出品一覧を返す。
    * 認証不要（公開エンドポイント）。
    * 想定外の値のクエリパラメータは無視してフィルタ未指定として扱う（ホワイトリスト検証）。
    */
@@ -41,10 +41,12 @@ export class ItemController {
       const rawCategory = req.query.category;
       const rawCondition = req.query.condition;
       const rawStatus = req.query.status;
+      const rawQ = req.query.q;
 
       const filter: GetItemsFilter = {
         // 文字列かつホワイトリスト内の値のみ受け付ける
-        category: typeof rawCategory === 'string' ? rawCategory : undefined,
+        q: normalizeQueryString(rawQ),
+        category: normalizeQueryString(rawCategory),
         condition:
           typeof rawCondition === 'string' && VALID_ITEM_CONDITIONS.includes(rawCondition as ItemCondition)
             ? (rawCondition as ItemCondition)
@@ -237,6 +239,15 @@ function normalizeOptionalString(value: unknown): string | undefined | false {
   }
   if (typeof value !== 'string') {
     return false;
+  }
+
+  const trimmed = value.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
+function normalizeQueryString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
   }
 
   const trimmed = value.trim();

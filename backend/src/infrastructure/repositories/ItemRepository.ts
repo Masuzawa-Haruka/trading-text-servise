@@ -83,7 +83,17 @@ export class ItemRepository implements IItemRepository {
   async findAll(filter: GetItemsFilter): Promise<ItemEntity[]> {
     const items = await prisma.item.findMany({
       where: {
-        ...(filter.category ? { category: filter.category } : {}),
+        ...(filter.q
+          ? {
+              OR: [
+                { title: { contains: filter.q, mode: 'insensitive' as const } },
+                { author: { contains: filter.q, mode: 'insensitive' as const } },
+                { description: { contains: filter.q, mode: 'insensitive' as const } },
+                { category: { contains: filter.q, mode: 'insensitive' as const } },
+              ],
+            }
+          : {}),
+        ...(filter.category ? { category: { contains: filter.category, mode: 'insensitive' as const } } : {}),
         ...(filter.condition ? { condition: filter.condition } : {}),
         ...(filter.status ? { status: filter.status } : { status: 'available' }),
       },
