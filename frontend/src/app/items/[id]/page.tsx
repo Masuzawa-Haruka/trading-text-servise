@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { campusLabel, conditionLabel, getItem, type Item } from "@/lib/items/api";
+import { createTransactionForItem } from "@/lib/transactions/api";
 
 export default function ItemDetailPage() {
   const params = useParams();
@@ -13,7 +14,9 @@ export default function ItemDetailPage() {
   const [item, setItem] = useState<Item | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isStartingTransaction, setIsStartingTransaction] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -42,8 +45,9 @@ export default function ItemDetailPage() {
     };
   }, [id]);
 
-  const handleStartTransaction = () => {
+  const handleStartTransaction = async () => {
     if (!item) return;
+    setActionError(null);
 
     if (!currentUserId) {
       router.push(`/login?next=/items/${item.id}`);
@@ -55,7 +59,15 @@ export default function ItemDetailPage() {
       return;
     }
 
-    alert("取引開始APIの結合は次の実装で対応します");
+    setIsStartingTransaction(true);
+    try {
+      const transaction = await createTransactionForItem(item);
+      router.push(`/transactions/${transaction.id}`);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "取引開始に失敗しました");
+    } finally {
+      setIsStartingTransaction(false);
+    }
   };
 
   if (isLoading) {
@@ -137,12 +149,16 @@ export default function ItemDetailPage() {
       </section>
 
       <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 right-0 z-20 mx-auto max-w-[430px] bg-white/90 p-4 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] backdrop-blur">
+        {actionError ? (
+          <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{actionError}</div>
+        ) : null}
         {item.status === "available" ? (
           <button
             onClick={handleStartTransaction}
-            className="w-full rounded-full bg-[#0047c7] py-3.5 text-sm font-bold text-white shadow-md transition-transform hover:bg-blue-700 active:scale-[0.98]"
+            disabled={isStartingTransaction}
+            className="w-full rounded-full bg-[#0047c7] py-3.5 text-sm font-bold text-white shadow-md transition-transform hover:bg-blue-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            取引を開始する
+            {isStartingTransaction ? "取引を開始中..." : "取引を開始する"}
           </button>
         ) : (
           <button disabled className="w-full rounded-full bg-slate-300 py-3.5 text-sm font-bold text-white">
