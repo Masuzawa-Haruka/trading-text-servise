@@ -47,6 +47,33 @@ const mockAuthClient = {
       error: null,
     };
   },
+  async signInWithPassword() {
+    return {
+      data: {
+        user: mockUser,
+        session: createMockSession(),
+      },
+      error: null,
+    };
+  },
+  async signUp() {
+    return {
+      data: {
+        user: mockUser,
+        session: createMockSession(),
+      },
+      error: null,
+    };
+  },
+  async exchangeCodeForSession() {
+    return {
+      data: {
+        user: mockUser,
+        session: createMockSession(),
+      },
+      error: null,
+    };
+  },
   async signOut() {
     return { error: null };
   },

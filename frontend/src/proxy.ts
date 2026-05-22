@@ -3,12 +3,31 @@ import { NextResponse, type NextRequest } from "next/server";
 import { MOCK_AUTH_ENABLED } from "@/lib/auth/mock";
 import { getOptionalSupabaseConfig } from "@/lib/supabase/env";
 
+const PROTECTED_PATH_PREFIXES = [
+  "/mypage",
+  "/sell",
+  "/transactions",
+  "/inbox",
+];
+
+const AUTH_PATHS = ["/login", "/signup"];
+
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   });
+  const pathname = request.nextUrl.pathname;
 
   if (MOCK_AUTH_ENABLED) {
+    return supabaseResponse;
+  }
+
+  const isProtectedPath = PROTECTED_PATH_PREFIXES.some((prefix) =>
+    pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+  const isAuthPath = AUTH_PATHS.includes(pathname);
+
+  if (!isProtectedPath && !isAuthPath) {
     return supabaseResponse;
   }
 
@@ -16,6 +35,10 @@ export async function proxy(request: NextRequest) {
 
   if (!supabaseConfig) {
     if (process.env.NODE_ENV === "development") {
+      if (isProtectedPath) {
+        return redirectToLogin(request);
+      }
+
       return supabaseResponse;
     }
 
@@ -52,16 +75,14 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // 未認証ユーザーを /login にリダイレクト
-  // （/login と /auth/** は除外）
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/auth")
-  ) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+  if (!user && isProtectedPath) {
+    return redirectToLogin(request);
+  }
+
+  if (user && isAuthPath) {
+    return NextResponse.redirect(
+      new URL(getSafeNextPath(request.nextUrl.searchParams.get("next")), request.url)
+    );
   }
 
   return supabaseResponse;
@@ -79,3 +100,22 @@ export const config = {
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
+
+function getSafeNextPath(next: string | null): string {
+  if (!next || !next.startsWith("/") || next.startsWith("//")) {
+    return "/";
+  }
+
+  return next;
+}
+
+function redirectToLogin(request: NextRequest): NextResponse {
+  const redirectUrl = request.nextUrl.clone();
+  redirectUrl.pathname = "/login";
+  redirectUrl.search = "";
+  redirectUrl.searchParams.set(
+    "next",
+    `${request.nextUrl.pathname}${request.nextUrl.search}`
+  );
+  return NextResponse.redirect(redirectUrl);
+}
