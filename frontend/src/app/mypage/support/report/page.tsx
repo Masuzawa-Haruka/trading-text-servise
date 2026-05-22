@@ -192,17 +192,39 @@ export default function ReportPage() {
     if (!files) return;
     setSubmitError(null);
 
-    const nextFiles = [...evidenceFiles, ...Array.from(files)];
-    const validationError = validateEvidenceFiles(nextFiles);
-    if (validationError) {
-      setSubmitError(validationError);
-      clearEvidenceInputs();
-      return;
+    const incomingFiles = Array.from(files);
+    const validFiles: File[] = [];
+    const errors: string[] = [];
+
+    for (const file of incomingFiles) {
+      if (!ALLOWED_REPORT_EVIDENCE_IMAGE_TYPES.has(file.type)) {
+        errors.push(`${file.name}: 対応していない形式です`);
+        continue;
+      }
+      if (file.size > MAX_REPORT_EVIDENCE_IMAGE_SIZE_BYTES) {
+        errors.push(`${file.name}: 10MBを超えています`);
+        continue;
+      }
+      validFiles.push(file);
     }
 
-    const nextPreviews = Array.from(files).map((file) => URL.createObjectURL(file));
-    setEvidenceFiles(nextFiles);
-    setEvidencePreviews((current) => [...current, ...nextPreviews]);
+    if (evidenceFiles.length + validFiles.length > MAX_REPORT_EVIDENCE_IMAGES) {
+      errors.push(`証拠画像は最大${MAX_REPORT_EVIDENCE_IMAGES}枚までです`);
+      const allowedCount = Math.max(0, MAX_REPORT_EVIDENCE_IMAGES - evidenceFiles.length);
+      validFiles.splice(allowedCount);
+    }
+
+    if (errors.length > 0) {
+      setSubmitError(errors.join("\n"));
+    }
+
+    if (validFiles.length > 0) {
+      const nextFiles = [...evidenceFiles, ...validFiles];
+      const nextPreviews = validFiles.map((file) => URL.createObjectURL(file));
+      setEvidenceFiles(nextFiles);
+      setEvidencePreviews((current) => [...current, ...nextPreviews]);
+    }
+
     clearEvidenceInputs();
   };
 
@@ -572,21 +594,4 @@ function statusLabel(status: Transaction["status"]): string {
     canceled: "キャンセル",
   };
   return labels[status];
-}
-
-function validateEvidenceFiles(files: File[]): string | null {
-  if (files.length > MAX_REPORT_EVIDENCE_IMAGES) {
-    return "証拠画像は最大5枚まで添付できます";
-  }
-
-  for (const file of files) {
-    if (!ALLOWED_REPORT_EVIDENCE_IMAGE_TYPES.has(file.type)) {
-      return "証拠画像はJPEG、PNG、WebP、GIF、HEICのいずれかを選択してください";
-    }
-    if (file.size > MAX_REPORT_EVIDENCE_IMAGE_SIZE_BYTES) {
-      return "証拠画像は1枚あたり10MB以内で選択してください";
-    }
-  }
-
-  return null;
 }
