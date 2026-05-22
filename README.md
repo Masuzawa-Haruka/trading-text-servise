@@ -25,6 +25,18 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
 
 The backend also requires `SUPABASE_JWT_SECRET` so it can verify `Authorization: Bearer <JWT>` from the frontend API client.
 
+Frontend authentication can be switched locally with `.env.local`:
+
+```bash
+# Real Supabase Auth
+NEXT_PUBLIC_AUTH_MOCK_ENABLED=false
+
+# Mock Auth for local UI work only
+NEXT_PUBLIC_AUTH_MOCK_ENABLED=true
+```
+
+Protected frontend routes such as `/mypage`, `/sell`, `/transactions`, and `/inbox` are guarded by Next.js Proxy. Unauthenticated users are redirected to `/login?next=...`; `/signup` uses the same Supabase password auth flow and blocks non-`@osaka-u.ac.jp` email addresses before calling Supabase.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

@@ -1,10 +1,10 @@
 import { Suspense } from "react";
 import { AuthForm } from "@/components/AuthForm";
 
-export default function LoginPage() {
+export default function SignupPage() {
   return (
     <Suspense>
-      <AuthForm initialMode="signin" />
+      <AuthForm initialMode="signup" />
     </Suspense>
   );
 }
