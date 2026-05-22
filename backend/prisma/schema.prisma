@@ -105,6 +105,7 @@ model Item {
   description String?
   condition   ItemCondition @default(new)
   campus      Campus        @default(toyonaka)
+  handoff_location String?
   category    String?
   price       Int           @default(0)
   status      ItemStatus    @default(available)

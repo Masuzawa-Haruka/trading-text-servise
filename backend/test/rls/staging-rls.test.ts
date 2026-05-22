@@ -253,8 +253,8 @@ async function seedScenario(db: PoolClient): Promise<void> {
 
   await db.query(
     `
-      INSERT INTO items (id, seller_id, title, condition, category, price, status)
-      VALUES ($1, $2, 'RLS test item', 'used_good', '数学', 0, 'available')
+      INSERT INTO items (id, seller_id, title, condition, campus, handoff_location, category, price, status)
+      VALUES ($1, $2, 'RLS test item', 'used_good', 'toyonaka', '総合図書館前', '数学', 0, 'available')
     `,
     [ids.item, ids.seller],
   );

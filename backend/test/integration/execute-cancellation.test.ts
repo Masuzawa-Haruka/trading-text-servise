@@ -196,12 +196,14 @@ async function seedScheduledTransaction(): Promise<Scenario> {
   `;
 
   await prisma.$executeRaw`
-    INSERT INTO items (id, seller_id, title, condition, status, price, created_at, updated_at)
+    INSERT INTO items (id, seller_id, title, condition, campus, handoff_location, status, price, created_at, updated_at)
     VALUES (
       ${scenario.itemId}::uuid,
       ${scenario.sellerId}::uuid,
       'キャンセル統合テスト参考書',
       'used_good',
+      'toyonaka',
+      '総合図書館前',
       'matching',
       1000,
       NOW(),

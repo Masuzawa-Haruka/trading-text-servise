@@ -109,7 +109,7 @@ export class ItemController {
         return;
       }
 
-      const { title, author, description, condition, campus, category, price, image_urls } = req.body;
+      const { title, author, description, condition, campus, handoff_location, category, price, image_urls } = req.body;
 
       // title: 非空文字列であることを検証
       if (typeof title !== 'string' || title.trim() === '') {
@@ -132,6 +132,20 @@ export class ItemController {
       const normalizedCategory = normalizeOptionalString(category);
       if (normalizedCategory === false) {
         res.status(400).json({ error: 'category は文字列で指定してください' });
+        return;
+      }
+
+      const normalizedHandoffLocation = normalizeOptionalString(handoff_location);
+      if (normalizedHandoffLocation === false) {
+        res.status(400).json({ error: 'handoff_location は文字列で指定してください' });
+        return;
+      }
+      if (!normalizedHandoffLocation) {
+        res.status(400).json({ error: 'handoff_location は空でない文字列で指定してください' });
+        return;
+      }
+      if (normalizedHandoffLocation.length > 100) {
+        res.status(400).json({ error: 'handoff_location は100文字以内で指定してください' });
         return;
       }
 
@@ -188,6 +202,7 @@ export class ItemController {
         description: normalizedDescription,
         condition,
         campus,
+        handoff_location: normalizedHandoffLocation,
         category: normalizedCategory,
         price,
         image_urls: normalizedImageUrls,

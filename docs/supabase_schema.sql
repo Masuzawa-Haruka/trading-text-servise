@@ -40,6 +40,7 @@ CREATE TABLE items (
     description TEXT,
     condition "ItemCondition" DEFAULT 'new',
     campus "Campus" NOT NULL DEFAULT 'toyonaka',
+    handoff_location VARCHAR,
     category VARCHAR,
     price INT DEFAULT 0,
     status "ItemStatus" DEFAULT 'available',

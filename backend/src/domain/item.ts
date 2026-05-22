@@ -37,6 +37,7 @@ export interface ItemEntity {
   description: string | null; // 詳細説明（任意）
   condition: ItemCondition;   // コンディション
   campus: Campus;             // 受け渡し候補キャンパス
+  handoff_location: string | null; // 受け渡し候補場所
   category: string | null;    // 科目カテゴリ（任意・検索用）
   price: number;              // 価格（0円推奨）
   status: ItemStatus;         // 出品のステータス
@@ -56,6 +57,7 @@ export interface CreateItemInput {
   description?: string;
   condition: ItemCondition;
   campus: Campus;
+  handoff_location?: string;
   category?: string;
   price?: number;
   /** Supabase Storageへのアップロード済みURL。先頭がメイン画像（display_order=0）。最大5枚。 */
