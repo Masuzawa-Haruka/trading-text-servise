@@ -15,6 +15,31 @@ const CAMPUS_OPTIONS: { value: Campus; label: string }[] = [
   { value: "minoh", label: "箕面キャンパス" },
 ];
 
+const OTHER_LOCATION_VALUE = "__other__";
+
+const HANDOFF_LOCATION_OPTIONS: Record<Campus, string[]> = {
+  toyonaka: [
+    "総合図書館前",
+    "学生交流棟（カルチェ・ラタン）前",
+    "基礎工学部 ピロティ",
+    "サイバーメディアセンター前",
+    "石橋阪大前駅付近（阪大下交差点など）",
+    "柴原阪大前駅 改札付近",
+  ],
+  suita: [
+    "ICホール前",
+    "理工学図書館前",
+    "本部前・コンベンションセンター付近",
+    "北千里駅 改札前",
+    "阪大病院前駅 改札付近",
+  ],
+  minoh: [
+    "箕面船場阪大前駅 改札付近",
+    "外国学図書館 エントランス付近",
+    "キャンパス3階ピロティ（広場）",
+  ],
+};
+
 const OSAKA_UNIV_DEPARTMENTS = [
   "文学部 人文学科",
   "人間科学部 人間科学科",
@@ -60,6 +85,8 @@ export default function SellPage() {
   const [showDeptSuggestions, setShowDeptSuggestions] = useState(false);
   const [condition, setCondition] = useState<ItemCondition | "">("");
   const [campus, setCampus] = useState<Campus | "">("");
+  const [handoffLocation, setHandoffLocation] = useState("");
+  const [customHandoffLocation, setCustomHandoffLocation] = useState("");
   const [price, setPrice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,10 +146,17 @@ export default function SellPage() {
     const normalizedDepartment = department.trim();
     const normalizedAuthor = author.trim();
     const normalizedDescription = description.trim();
+    const normalizedHandoffLocation =
+      handoffLocation === OTHER_LOCATION_VALUE ? customHandoffLocation.trim() : handoffLocation.trim();
     const parsedPrice = Number.parseInt(price, 10);
 
-    if (!normalizedTitle || !condition || !campus || price === "" || !normalizedDepartment) {
+    if (!normalizedTitle || !condition || !campus || !normalizedHandoffLocation || price === "" || !normalizedDepartment) {
       setError("必須項目をすべて入力してください");
+      return;
+    }
+
+    if (normalizedHandoffLocation.length > 100) {
+      setError("受け渡し場所は100文字以内で入力してください");
       return;
     }
 
@@ -146,6 +180,7 @@ export default function SellPage() {
         description: normalizedDescription || undefined,
         condition,
         campus,
+        handoff_location: normalizedHandoffLocation,
         category: normalizedDepartment,
         price: parsedPrice,
         image_urls: imageUrls,
@@ -291,7 +326,11 @@ export default function SellPage() {
             </label>
             <select
               value={campus}
-              onChange={(e) => setCampus(e.target.value as Campus | "")}
+              onChange={(e) => {
+                setCampus(e.target.value as Campus | "");
+                setHandoffLocation("");
+                setCustomHandoffLocation("");
+              }}
               className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">選択してください</option>
@@ -302,6 +341,43 @@ export default function SellPage() {
               ))}
             </select>
             <p className="mt-1 text-xs text-slate-500">出品者が主に受け渡ししやすいキャンパスです</p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-bold text-slate-700">
+              受け渡し場所 <span className="text-xs font-normal text-red-500">*必須</span>
+            </label>
+            <select
+              value={handoffLocation}
+              onChange={(e) => {
+                setHandoffLocation(e.target.value);
+                if (e.target.value !== OTHER_LOCATION_VALUE) {
+                  setCustomHandoffLocation("");
+                }
+              }}
+              disabled={!campus}
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-400"
+            >
+              <option value="">キャンパスを選択してから指定</option>
+              {campus
+                ? HANDOFF_LOCATION_OPTIONS[campus].map((location) => (
+                    <option key={location} value={location}>
+                      {location}
+                    </option>
+                  ))
+                : null}
+              {campus ? <option value={OTHER_LOCATION_VALUE}>その他（入力する）</option> : null}
+            </select>
+            {handoffLocation === OTHER_LOCATION_VALUE ? (
+              <input
+                type="text"
+                value={customHandoffLocation}
+                onChange={(e) => setCustomHandoffLocation(e.target.value)}
+                maxLength={100}
+                placeholder="例: 〇〇棟 1階入口付近"
+                className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            ) : null}
           </div>
         </section>
 

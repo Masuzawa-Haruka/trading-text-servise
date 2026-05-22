@@ -23,6 +23,7 @@ export type Item = {
   description: string | null;
   condition: ItemCondition;
   campus: Campus;
+  handoff_location: string | null;
   category: string | null;
   price: number;
   status: ItemStatus;
@@ -45,6 +46,7 @@ export type CreateItemPayload = {
   description?: string;
   condition: ItemCondition;
   campus: Campus;
+  handoff_location: string;
   category?: string;
   price: number;
   image_urls?: string[];

@@ -117,6 +117,9 @@ export default function Home() {
                 <p className="mt-1 truncate text-[11px] text-slate-500">
                   ⌖ {campusLabel(book.campus)} / {book.category ?? "カテゴリ未設定"}
                 </p>
+                {book.handoff_location ? (
+                  <p className="mt-0.5 truncate text-[11px] text-slate-500">受け渡し　{book.handoff_location}</p>
+                ) : null}
               </div>
               <div className="flex flex-col items-end justify-between pb-1 text-xs text-slate-500">
                 {book.status === "available" && <span className="font-bold text-blue-600">詳細 &gt;</span>}

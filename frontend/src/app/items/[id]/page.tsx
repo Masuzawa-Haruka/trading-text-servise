@@ -113,6 +113,9 @@ export default function ItemDetailPage() {
           <div className="font-bold text-slate-500">キャンパス</div>
           <div className="text-slate-900">{campusLabel(item.campus)}</div>
 
+          <div className="font-bold text-slate-500">受け渡し場所</div>
+          <div className="text-slate-900">{item.handoff_location ?? "未設定"}</div>
+
           <div className="font-bold text-slate-500">カテゴリ</div>
           <div className="text-slate-900">{item.category ?? "未設定"}</div>
         </div>
