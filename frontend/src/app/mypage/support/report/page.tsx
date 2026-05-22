@@ -1,8 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { submitReport } from "@/lib/reports/api";
+import {
+  ALLOWED_REPORT_EVIDENCE_IMAGE_TYPES,
+  MAX_REPORT_EVIDENCE_IMAGES,
+  MAX_REPORT_EVIDENCE_IMAGE_SIZE_BYTES,
+  deleteReportEvidenceImages,
+  submitReport,
+  uploadReportEvidenceImages,
+} from "@/lib/reports/api";
 import { getTransactions, type Transaction } from "@/lib/transactions/api";
 import { getMyProfile } from "@/lib/users/api";
 
@@ -22,6 +29,9 @@ const REPORT_TYPES: ReportType[] = [
 
 export default function ReportPage() {
   const router = useRouter();
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const evidencePreviewsRef = useRef<string[]>([]);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedType, setSelectedType] = useState<ReportType | null>(null);
   const [targetUserId, setTargetUserId] = useState("");
@@ -34,6 +44,8 @@ export default function ReportPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
+  const [evidencePreviews, setEvidencePreviews] = useState<string[]>([]);
 
   useEffect(() => {
     let ignore = false;
@@ -81,6 +93,16 @@ export default function ReportPage() {
       ignore = true;
     };
   }, [router]);
+
+  useEffect(() => {
+    evidencePreviewsRef.current = evidencePreviews;
+  }, [evidencePreviews]);
+
+  useEffect(() => {
+    return () => {
+      evidencePreviewsRef.current.forEach(URL.revokeObjectURL);
+    };
+  }, []);
 
   const handleNext = () => {
     setSubmitError(null);
@@ -142,22 +164,60 @@ export default function ReportPage() {
       return;
     }
 
+    let uploadedEvidenceImageUrls: string[] = [];
     try {
       setIsSubmitting(true);
       setSubmitError(null);
+      uploadedEvidenceImageUrls = await uploadReportEvidenceImages(evidenceFiles);
       await submitReport({
         transaction_id: transactionItem,
         reported_user_id: targetUserId,
         reason: selectedType.id,
         detail: details.trim(),
+        evidence_image_urls: uploadedEvidenceImageUrls,
       });
       router.push("/mypage/support");
     } catch (caughtError) {
+      if (uploadedEvidenceImageUrls.length > 0) {
+        await deleteReportEvidenceImages(uploadedEvidenceImageUrls);
+      }
       const message = caughtError instanceof Error ? caughtError.message : "通報の送信に失敗しました";
       setSubmitError(message);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleEvidenceFilesChange = (files: FileList | null) => {
+    if (!files) return;
+    setSubmitError(null);
+
+    const nextFiles = [...evidenceFiles, ...Array.from(files)];
+    const validationError = validateEvidenceFiles(nextFiles);
+    if (validationError) {
+      setSubmitError(validationError);
+      clearEvidenceInputs();
+      return;
+    }
+
+    const nextPreviews = Array.from(files).map((file) => URL.createObjectURL(file));
+    setEvidenceFiles(nextFiles);
+    setEvidencePreviews((current) => [...current, ...nextPreviews]);
+    clearEvidenceInputs();
+  };
+
+  const handleRemoveEvidenceImage = (index: number) => {
+    const preview = evidencePreviews[index];
+    if (preview) {
+      URL.revokeObjectURL(preview);
+    }
+    setEvidenceFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
+    setEvidencePreviews((current) => current.filter((_, previewIndex) => previewIndex !== index));
+  };
+
+  const clearEvidenceInputs = () => {
+    if (galleryInputRef.current) galleryInputRef.current.value = "";
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
   };
 
   const selectedTargetUserName =
@@ -344,12 +404,64 @@ export default function ReportPage() {
               <label className="mb-1 block text-sm font-bold text-slate-700">
                 証拠画像 <span className="text-xs font-normal text-slate-400">(任意)</span>
               </label>
-              <p className="mb-2 text-xs text-slate-500">スクリーンショットなどがあれば添付してください</p>
-              <div className="grid place-items-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 py-8 cursor-pointer hover:bg-slate-100 transition-colors">
-                <div className="text-2xl mb-2 text-slate-400">📷</div>
-                <div className="text-sm font-bold text-slate-700">画像を選択</div>
-                <div className="text-[10px] text-slate-400 mt-1">最大5枚まで (1枚あたり10MB以内)</div>
+              <p className="mb-2 text-xs text-slate-500">スクリーンショットや現場写真があれば添付してください</p>
+              <input
+                ref={galleryInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
+                multiple
+                className="hidden"
+                onChange={(e) => handleEvidenceFilesChange(e.target.files)}
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => handleEvidenceFilesChange(e.target.files)}
+              />
+              <div className="rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-4 transition-colors hover:bg-slate-100">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => galleryInputRef.current?.click()}
+                    className="flex-1 rounded bg-white px-3 py-3 text-sm font-bold text-slate-700 shadow-sm ring-1 ring-slate-200"
+                  >
+                    画像を選択
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="flex-1 rounded bg-white px-3 py-3 text-sm font-bold text-slate-700 shadow-sm ring-1 ring-slate-200"
+                  >
+                    カメラで撮影
+                  </button>
+                </div>
+                <div className="mt-2 text-center text-[10px] text-slate-400">最大5枚まで (1枚あたり10MB以内)</div>
+                {evidencePreviews.length > 0 ? (
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    {evidencePreviews.map((previewUrl, index) => (
+                      <div key={previewUrl} className="relative aspect-square overflow-hidden rounded-lg bg-slate-200">
+                        <img src={previewUrl} alt="" className="size-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveEvidenceImage(index)}
+                          className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-black/60 text-xs font-bold text-white"
+                          aria-label="証拠画像を削除"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
+              {submitError ? (
+                <div className="mt-2 rounded-lg bg-red-50 px-3 py-2">
+                  <p className="text-xs font-bold text-red-600">{submitError}</p>
+                </div>
+              ) : null}
             </div>
 
             <button
@@ -402,7 +514,17 @@ export default function ReportPage() {
 
             <div className="border-b border-slate-100 pb-3">
               <h3 className="text-xs font-bold text-slate-500 mb-1">証拠画像</h3>
-              <p className="text-sm text-slate-400">添付なし</p>
+              {evidencePreviews.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {evidencePreviews.map((previewUrl) => (
+                    <div key={previewUrl} className="aspect-square overflow-hidden rounded-lg bg-slate-200">
+                      <img src={previewUrl} alt="" className="size-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400">添付なし</p>
+              )}
             </div>
 
             <div className="pt-4 flex gap-3">
@@ -450,4 +572,21 @@ function statusLabel(status: Transaction["status"]): string {
     canceled: "キャンセル",
   };
   return labels[status];
+}
+
+function validateEvidenceFiles(files: File[]): string | null {
+  if (files.length > MAX_REPORT_EVIDENCE_IMAGES) {
+    return "証拠画像は最大5枚まで添付できます";
+  }
+
+  for (const file of files) {
+    if (!ALLOWED_REPORT_EVIDENCE_IMAGE_TYPES.has(file.type)) {
+      return "証拠画像はJPEG、PNG、WebP、GIF、HEICのいずれかを選択してください";
+    }
+    if (file.size > MAX_REPORT_EVIDENCE_IMAGE_SIZE_BYTES) {
+      return "証拠画像は1枚あたり10MB以内で選択してください";
+    }
+  }
+
+  return null;
 }
