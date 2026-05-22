@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getItem, type Item } from "@/lib/items/api";
 import { getTransactions, type Transaction } from "@/lib/transactions/api";
 import { getMyProfile } from "@/lib/users/api";
 
@@ -27,7 +26,7 @@ export default function ReportPage() {
   const [targetUser, setTargetUser] = useState("");
   const [transactionItem, setTransactionItem] = useState("");
   const [details, setDetails] = useState("");
-  const [userTransactions, setUserTransactions] = useState<{ tx: Transaction; item: Item | null }[]>([]);
+  const [userTransactions, setUserTransactions] = useState<{ tx: Transaction; itemTitle: string }[]>([]);
   const [relatedUsers, setRelatedUsers] = useState<{ id: string; nickname: string }[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loadingTransactions, setLoadingTransactions] = useState(true);
@@ -42,15 +41,10 @@ export default function ReportPage() {
           getMyProfile(),
           getTransactions(),
         ]);
-        const txsWithItems = await Promise.all(
-          transactions.map(async (tx) => {
-            try {
-              return { tx, item: await getItem(tx.item_id) };
-            } catch {
-              return { tx, item: null };
-            }
-          }),
-        );
+        const txsWithItems = transactions.map((tx) => ({
+          tx,
+          itemTitle: tx.item_title ?? "取引中の参考書",
+        }));
 
         const usersMap = new Map<string, string>();
         transactions.forEach((tx) => {
@@ -262,8 +256,8 @@ export default function ReportPage() {
                 className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
               >
                 <option value="">{loadingTransactions ? "読み込み中..." : "取引を選択"}</option>
-                {userTransactions.map(({tx, item}) => (
-                  <option key={tx.id} value={tx.id}>{item?.title ?? "取引中の参考書"} ({statusLabel(tx.status)})</option>
+                {userTransactions.map(({tx, itemTitle}) => (
+                  <option key={tx.id} value={tx.id}>{itemTitle} ({statusLabel(tx.status)})</option>
                 ))}
               </select>
               <p className="mt-1 text-[10px] text-slate-500">※関連する取引がある場合は選択してください</p>
@@ -337,7 +331,7 @@ export default function ReportPage() {
             <div className="border-b border-slate-100 pb-3">
               <h3 className="text-xs font-bold text-slate-500 mb-1">取引する教科書</h3>
               <p className="text-sm font-bold text-slate-900">
-                {transactionItem ? (userTransactions.find(t => t.tx.id === transactionItem)?.item?.title || "選択された取引") : "なし"}
+                {transactionItem ? (userTransactions.find(t => t.tx.id === transactionItem)?.itemTitle || "選択された取引") : "なし"}
               </p>
             </div>
 
