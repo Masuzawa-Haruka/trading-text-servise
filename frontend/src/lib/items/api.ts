@@ -78,7 +78,7 @@ export async function getItems(params: GetItemsParams = {}): Promise<Item[]> {
 
 export async function getItem(id: string): Promise<Item> {
   if (MOCK_AUTH_ENABLED) {
-    const item = getMockItems({ status: undefined }).find((mockItem) => mockItem.id === id);
+    const item = readMockItems().find((mockItem) => mockItem.id === id);
     if (!item) {
       throw new Error("出品が見つかりません");
     }

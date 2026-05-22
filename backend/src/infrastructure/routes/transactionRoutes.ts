@@ -10,6 +10,7 @@ import { TransactionController } from '../../interfaces/controllers/TransactionC
 import { TransactionRepository } from '../repositories/TransactionRepository';
 import { ItemRepository } from '../repositories/ItemRepository';
 import { CreateTransactionUseCase } from '../../usecases/CreateTransactionUseCase';
+import { GetTransactionUseCase } from '../../usecases/GetTransactionUseCase';
 import { GetTransactionsUseCase } from '../../usecases/GetTransactionsUseCase';
 import { UpdateTransactionUseCase } from '../../usecases/UpdateTransactionUseCase';
 import { authenticateToken } from '../../middleware/auth';
@@ -23,6 +24,7 @@ const itemRepository = new ItemRepository();
 
 const transactionController = new TransactionController(
   new CreateTransactionUseCase(transactionRepository, itemRepository),
+  new GetTransactionUseCase(transactionRepository),
   new GetTransactionsUseCase(transactionRepository),
   new UpdateTransactionUseCase(transactionRepository),
 );
@@ -33,6 +35,9 @@ router.use(authenticateToken);
 
 // 自分が関わる取引一覧取得
 router.get('/', transactionController.getTransactions);
+
+// 自分が関わる取引詳細取得
+router.get('/:id', transactionController.getTransaction);
 
 // マッチング申し込み（取引作成）
 router.post('/', transactionController.createTransaction);
