@@ -4,38 +4,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SignOutButton } from "@/components/SignOutButton";
-import { apiFetch } from "@/lib/api/client";
-import { createClient } from "@/lib/supabase/client";
-
-type Profile = {
-  id: string;
-  email: string;
-  nickname: string;
-  credit_score: number;
-  profile_image_url: string | null;
-};
-
-type ItemSummary = {
-  id: string;
-  seller_id: string;
-  title: string;
-  status: string;
-};
-
-type TransactionSummary = {
-  id: string;
-  item_id: string;
-  seller_id: string;
-  buyer_id: string;
-  status: string;
-};
+import { getItem, getItems, type Item, type ItemStatus } from "@/lib/items/api";
+import { getTransactions, type Transaction } from "@/lib/transactions/api";
+import { getMyProfile, type UserProfile } from "@/lib/users/api";
 
 type MyPageData = {
-  profile: Profile;
-  soldItems: ItemSummary[];
+  profile: UserProfile;
+  soldItems: Item[];
   boughtTransactions: Array<{
-    transaction: TransactionSummary;
-    item: ItemSummary | null;
+    transaction: Transaction;
+    item: Item | null;
   }>;
 };
 
@@ -49,57 +27,40 @@ export default function MyPage() {
 
     async function loadMyPage() {
       try {
-        const supabase = createClient();
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError || !user) {
-          router.replace("/login");
-          return;
-        }
-
-        const { data: profileRow } = await supabase
-          .from("users")
-          .select("id,email,nickname,credit_score,profile_image_url")
-          .eq("id", user.id)
-          .maybeSingle<Profile>();
-
-        const [itemsResponse, transactionsResponse] = await Promise.all([
-          apiFetch("/api/items"),
-          apiFetch("/api/transactions"),
+        const [profile, itemsByStatus, transactions] = await Promise.all([
+          getMyProfile(),
+          Promise.all(ITEM_STATUSES.map((status) => getItems({ status }))),
+          getTransactions(),
         ]);
-
-        if (!itemsResponse.ok || !transactionsResponse.ok) {
-          throw new Error("マイページ情報の取得に失敗しました");
-        }
-
-        const allItems = (await itemsResponse.json()) as ItemSummary[];
-        const transactions = (await transactionsResponse.json()) as TransactionSummary[];
+        const allItems = itemsByStatus.flat();
         const itemById = new Map(allItems.map((item) => [item.id, item]));
-        const profile = profileRow ?? {
-          id: user.id,
-          email: user.email ?? "",
-          nickname: getNickname(user.user_metadata),
-          credit_score: 100,
-          profile_image_url: null,
-        };
+        const boughtTransactions = await Promise.all(
+          transactions
+            .filter((transaction) => transaction.buyer_id === profile.id)
+            .map(async (transaction) => {
+              const cachedItem = itemById.get(transaction.item_id);
+              if (cachedItem) return { transaction, item: cachedItem };
+              try {
+                return { transaction, item: await getItem(transaction.item_id) };
+              } catch {
+                return { transaction, item: null };
+              }
+            }),
+        );
 
         if (!ignore) {
           setData({
             profile,
-            soldItems: allItems.filter((item) => item.seller_id === user.id),
-            boughtTransactions: transactions
-              .filter((transaction) => transaction.buyer_id === user.id)
-              .map((transaction) => ({
-                transaction,
-                item: itemById.get(transaction.item_id) ?? null,
-              })),
+            soldItems: allItems.filter((item) => item.seller_id === profile.id),
+            boughtTransactions,
           });
         }
-      } catch {
+      } catch (caughtError) {
         if (!ignore) {
+          if (caughtError instanceof Error && caughtError.message === "ログインが必要です") {
+            router.replace("/login");
+            return;
+          }
           setError("マイページ情報を取得できませんでした");
         }
       }
@@ -224,11 +185,7 @@ export default function MyPage() {
   );
 }
 
-function getNickname(metadata: Record<string, unknown>): string {
-  return typeof metadata.nickname === "string" && metadata.nickname.trim()
-    ? metadata.nickname.trim()
-    : "ゲストユーザー";
-}
+const ITEM_STATUSES: ItemStatus[] = ["available", "matching", "completed", "canceled"];
 
 function statusLabel(status: string): string {
   const labels: Record<string, string> = {
