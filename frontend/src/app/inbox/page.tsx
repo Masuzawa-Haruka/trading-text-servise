@@ -8,7 +8,6 @@ import {
   isTransactionClosed,
   type Transaction,
 } from "@/lib/transactions/api";
-import { getItem as fetchItem } from "@/lib/items/api";
 
 // ───────────────────────────────────────────
 // 型定義
@@ -99,24 +98,14 @@ export default function InboxPage() {
       try {
         const transactions = await getTransactions();
 
-        // 各取引の item_id からアイテムタイトルを並列取得（エラーは null として扱う）
-        const itemTitles = await Promise.all(
-          transactions.map(async (tx) => {
-            try {
-              const item = await fetchItem(tx.item_id);
-              return item.title;
-            } catch {
-              return null;
-            }
-          })
-        );
-
         if (!isMounted) return;
 
-        const notes: TransactionNotification[] = transactions.map((tx, i) => ({
+        // [4] N+1解消: item_title はバックエンドJOINで取得済み（本物API）
+        //             またはmockStoreから同期取得済み（Mock Auth）
+        const notes: TransactionNotification[] = transactions.map((tx) => ({
           id: `tx_${tx.id}`,
           txId: tx.id,
-          title: transactionNotificationText(tx.status, itemTitles[i]),
+          title: transactionNotificationText(tx.status, tx.item_title),
           updatedAt: tx.updated_at,
           closed: isTransactionClosed(tx.status),
           status: tx.status,
