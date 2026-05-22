@@ -8,7 +8,7 @@
  * 原子的操作（createAtomically, updateWithItemSync）では Prisma の
  * $transaction を使い、複数テーブルの更新をDBトランザクション内で行う。
  */
-import { Transaction } from '@prisma/client';
+import { Transaction, Item } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { ITransactionRepository } from '../../domain/repositories/ITransactionRepository';
 import {
@@ -100,9 +100,11 @@ export class TransactionRepository implements ITransactionRepository {
       where: {
         OR: [{ seller_id: userId }, { buyer_id: userId }],
       },
-      orderBy: { created_at: 'desc' },
+      include: { item: { select: { title: true } } },
+      // 受信箱は「最後に更新された取引」が最上部に来るよう updated_at 降順で返す
+      orderBy: { updated_at: 'desc' },
     });
-    return transactions.map((t) => this.toEntity(t));
+    return transactions.map((t) => this.toEntity(t, t.item.title));
   }
 
   /**
@@ -193,9 +195,10 @@ export class TransactionRepository implements ITransactionRepository {
    * 引数に Prisma 生成の Transaction 型を使うことで、フィールド変更をコンパイル時に検知できる。
    * Prismaの Enum 型は .toString() で文字列に変換する必要がある。
    */
-  private toEntity(transaction: Transaction): TransactionEntity {
+  private toEntity(transaction: Transaction & { item?: { title: string } | null }, itemTitle?: string | null): TransactionEntity {
     return {
       ...transaction,
+      item_title: itemTitle ?? null,
       status: transaction.status.toString() as TransactionStatus,
     };
   }

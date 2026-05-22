@@ -55,10 +55,12 @@ export const TRANSITION_ALLOWED_ROLES: Record<string, TransactionRole> = {
 /**
  * 取引エンティティ（DBの transactions テーブル 1 行に対応）
  * リポジトリ・ユースケース・コントローラー間のデータ受け渡しに使う。
+ * item_title は受信箱表示用に一覧取得時のみ JOIN して含める（詳細取得時は null）。
  */
 export interface TransactionEntity {
   id: string;
   item_id: string;
+  item_title: string | null;  // 受信箱向けに一覧取得時のみ設定（詳細取得時は null）
   seller_id: string;        // 出品者ユーザーID
   buyer_id: string;         // 購入希望者ユーザーID
   final_price: number | null; // 合意した価格（未確定時は null）

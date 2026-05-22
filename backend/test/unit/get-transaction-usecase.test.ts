@@ -51,6 +51,7 @@ function createTransaction(): TransactionEntity {
   return {
     id: ids.transaction,
     item_id: ids.item,
+    item_title: null,
     seller_id: ids.seller,
     buyer_id: ids.buyer,
     final_price: null,

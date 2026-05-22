@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
-import { MOCK_AUTH_ENABLED } from "@/lib/auth/mock";
+import { MOCK_AUTH_ENABLED, MOCK_USER_ID } from "@/lib/auth/mock";
 import { campusLabel, conditionLabel, type Item } from "@/lib/items/api";
 import { mockStore, type MockItem, type MockTransaction } from "@/lib/mockStore";
 
@@ -8,6 +8,7 @@ export type TransactionStatus = "proposing" | "scheduled" | "completed" | "cance
 export type Transaction = {
   id: string;
   item_id: string;
+  item_title: string | null; // 受信箱向けに一覧取得時のみ割り当てられる（詳細取得時は null）
   seller_id: string;
   buyer_id: string;
   final_price: number | null;
@@ -66,6 +67,62 @@ export type CancellationRequest = {
   created_at: string;
   updated_at: string;
 };
+
+// ───────────────────────────────────────────
+// 通知ヘルパー
+// ───────────────────────────────────────────
+
+/**
+ * 取引のステータスに応じた受信箱の通知文言を返す。
+ * itemTitle が渡されれば「『書名』の取引が〜」となる。
+ * null の場合は「取引の取引が〜」とならないよう、展開形の文言にフォールバックする。
+ */
+export function transactionNotificationText(
+  status: TransactionStatus,
+  itemTitle: string | null
+): string {
+  if (itemTitle) {
+    switch (status) {
+      case "proposing":  return `「${itemTitle}」の取引が開始されました`;
+      case "scheduled": return `「${itemTitle}」の日程が決定しました`;
+      case "completed": return `「${itemTitle}」の取引が完了しました`;
+      case "canceled":  return `「${itemTitle}」の取引がキャンセルされました`;
+    }
+  }
+  // itemTitle 取得失敗時のフォールバック（「取引の取引が」にならない展開形の文言）
+  switch (status) {
+    case "proposing":  return "取引が開始されました";
+    case "scheduled": return "日程が決定しました";
+    case "completed": return "取引が完了しました";
+    case "canceled":  return "取引がキャンセルされました";
+  }
+}
+
+/**
+ * 取引のステータスが終了（完了 or キャンセル）かどうかを判定する。
+ * 受信箱の「既読」表示に使う。
+ */
+export function isTransactionClosed(status: TransactionStatus): boolean {
+  return status === "completed" || status === "canceled";
+}
+
+// ───────────────────────────────────────────
+// API 関数
+// ───────────────────────────────────────────
+
+/**
+ * 認証ユーザーが関わる取引一覧を取得する（売り手・買い手どちらも含む）。
+ * 本物のAPIは item_title を含むので受信箱での N+1 は発生しない。
+ * モック時は mockStore を単一ソースとして取引一覧を返す。
+ */
+export async function getTransactions(): Promise<Transaction[]> {
+  if (MOCK_AUTH_ENABLED) {
+    return getMockTransactions();
+  }
+
+  const response = await apiFetch("/api/transactions");
+  return parseJsonResponse<Transaction[]>(response, "取引一覧の取得に失敗しました");
+}
 
 export async function createTransactionForItem(item: Item): Promise<Transaction> {
   if (MOCK_AUTH_ENABLED) {
@@ -231,6 +288,21 @@ async function parseJsonResponse<T>(response: Response, fallbackMessage: string)
   return data as T;
 }
 
+// ───────────────────────────────────────────
+// モック実装（getTransactions 用）
+// ───────────────────────────────────────────
+
+// [1] Mock単一ソース: mockStore.getTransactions() を中心に、toApiTransaction 絵かせて変換
+// mock_api_transactions は使わず、getTransaction() / createMockTransactionForItem() と完全に同期する
+function getMockTransactions(): Transaction[] {
+  const txs = mockStore.getTransactions();
+  return txs.map((tx) => {
+    // mockStoreのアイテムからタイトルを追加フェッチ（N+1はない: mockStoreはインメモリ）
+    const item = mockStore.getItem(tx.itemId);
+    return toApiTransaction(tx, {}, item?.title ?? null);
+  });
+}
+
 function createMockTransactionForItem(item: Item): Transaction {
   ensureMockStoreItem(item);
   const transaction = mockStore.createTransaction(item.id, item.seller_id);
@@ -333,11 +405,13 @@ function updateMockApiItemStatus(itemId: string, status: Item["status"]): void {
 function toApiTransaction(
   transaction: MockTransaction,
   override: Partial<Pick<Transaction, "meeting_datetime" | "meeting_place">> = {},
+  itemTitle: string | null = null,
 ): Transaction {
   const now = new Date().toISOString();
   return {
     id: transaction.id,
     item_id: transaction.itemId,
+    item_title: itemTitle,
     seller_id: transaction.sellerId,
     buyer_id: transaction.buyerId,
     final_price: transaction.finalPrice ?? null,
