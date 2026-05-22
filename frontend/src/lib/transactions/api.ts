@@ -57,6 +57,16 @@ export type SendScheduleProposalPayload = {
   }[];
 };
 
+export type CancellationRequest = {
+  id: string;
+  transaction_id: string;
+  requester_id: string;
+  reason: string | null;
+  status: "pending" | "accepted" | "rejected";
+  created_at: string;
+  updated_at: string;
+};
+
 export async function createTransactionForItem(item: Item): Promise<Transaction> {
   if (MOCK_AUTH_ENABLED) {
     return createMockTransactionForItem(item);
@@ -189,6 +199,24 @@ export async function respondScheduleProposal(
   return parseJsonResponse<ScheduleProposal>(response, "日程提案への回答に失敗しました");
 }
 
+export async function executeCancellation(
+  transaction: Transaction,
+  reason?: string,
+): Promise<CancellationRequest> {
+  if (MOCK_AUTH_ENABLED) {
+    return executeMockCancellation(transaction, reason);
+  }
+
+  const response = await apiFetch("/api/cancellations/execute", {
+    method: "POST",
+    body: JSON.stringify({
+      transaction_id: transaction.id,
+      ...(reason ? { reason } : {}),
+    }),
+  });
+  return parseJsonResponse<CancellationRequest>(response, "キャンセル実行に失敗しました");
+}
+
 async function parseJsonResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
   const data = await response.json().catch(() => null);
 
@@ -229,6 +257,35 @@ function updateMockTransaction(
     meeting_datetime: payload.meeting_datetime ?? null,
     meeting_place: payload.meeting_place ?? null,
   });
+}
+
+function executeMockCancellation(transaction: Transaction, reason?: string): CancellationRequest {
+  if (transaction.status === "canceled") {
+    throw new Error("この取引はすでにキャンセル済みです");
+  }
+  if (transaction.status !== "scheduled") {
+    throw new Error("キャンセル実行は日時確定後（scheduled）の取引でのみ行えます");
+  }
+
+  mockStore.updateTransactionStatus(transaction.id, "canceled");
+  mockStore.updateItemStatus(transaction.item_id, "available");
+  updateMockApiItemStatus(transaction.item_id, "available");
+  mockStore.addMessage(
+    transaction.id,
+    `【キャンセル】\n${reason ? `理由: ${reason}` : "理由なし"}`,
+    "system",
+  );
+
+  const now = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    transaction_id: transaction.id,
+    requester_id: mockStore.currentUser.id,
+    reason: reason ?? null,
+    status: "accepted",
+    created_at: now,
+    updated_at: now,
+  };
 }
 
 function ensureMockStoreItem(item: Item): void {
