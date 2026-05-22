@@ -7,7 +7,7 @@
  */
 import { prisma } from '../../lib/prisma';
 import { IItemRepository } from '../../domain/repositories/IItemRepository';
-import { ItemEntity, CreateItemInput, GetItemsFilter, ItemStatus, ItemCondition } from '../../domain/item';
+import { ItemEntity, CreateItemInput, GetItemsFilter, ItemStatus, ItemCondition, Campus } from '../../domain/item';
 import { ItemImageEntity, CreateItemImagesInput } from '../../domain/item_image';
 import { Item, ItemImage } from '@prisma/client';
 
@@ -29,6 +29,7 @@ export class ItemRepository implements IItemRepository {
         author: input.author ?? null,
         description: input.description ?? null,
         condition: input.condition,
+        campus: input.campus,
         category: input.category ?? null,
         price: input.price ?? 0,
       },
@@ -52,6 +53,7 @@ export class ItemRepository implements IItemRepository {
           author: itemInput.author ?? null,
           description: itemInput.description ?? null,
           condition: itemInput.condition,
+          campus: itemInput.campus,
           category: itemInput.category ?? null,
           price: itemInput.price ?? 0,
         },
@@ -94,6 +96,7 @@ export class ItemRepository implements IItemRepository {
             }
           : {}),
         ...(filter.category ? { category: { contains: filter.category, mode: 'insensitive' as const } } : {}),
+        ...(filter.campus ? { campus: filter.campus } : {}),
         ...(filter.condition ? { condition: filter.condition } : {}),
         ...(filter.status ? { status: filter.status } : { status: 'available' }),
       },
@@ -167,6 +170,7 @@ export class ItemRepository implements IItemRepository {
       author: item.author,
       description: item.description,
       condition: item.condition.toString() as ItemCondition,
+      campus: item.campus.toString() as Campus,
       category: item.category,
       price: item.price,
       status: item.status.toString() as ItemStatus,

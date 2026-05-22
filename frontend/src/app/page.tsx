@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { conditionLabel, getItems, type Item } from "@/lib/items/api";
+import { campusLabel, conditionLabel, getItems, type Item } from "@/lib/items/api";
 
 const CATEGORY_FILTERS = ["すべて", "0円のみ", "理学部", "工学部", "文学部"];
 
@@ -114,7 +114,9 @@ export default function Home() {
                 <p className="mt-1 text-xl font-black text-red-500">
                   {book.price === 0 ? "0円" : `${book.price.toLocaleString()}円`}
                 </p>
-                <p className="mt-1 truncate text-[11px] text-slate-500">⌖ {book.category ?? "カテゴリ未設定"}</p>
+                <p className="mt-1 truncate text-[11px] text-slate-500">
+                  ⌖ {campusLabel(book.campus)} / {book.category ?? "カテゴリ未設定"}
+                </p>
               </div>
               <div className="flex flex-col items-end justify-between pb-1 text-xs text-slate-500">
                 {book.status === "available" && <span className="font-bold text-blue-600">詳細 &gt;</span>}

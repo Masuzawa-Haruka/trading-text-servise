@@ -7,6 +7,7 @@
 CREATE TYPE "UserStatus" AS ENUM ('active', 'warning', 'suspended');
 CREATE TYPE "ItemStatus" AS ENUM ('available', 'matching', 'completed', 'canceled');
 CREATE TYPE "ItemCondition" AS ENUM ('new', 'used_good', 'used_bad');
+CREATE TYPE "Campus" AS ENUM ('toyonaka', 'suita', 'minoh');
 CREATE TYPE "TransactionStatus" AS ENUM ('proposing', 'scheduled', 'completed', 'canceled');
 CREATE TYPE "ProposalStatus" AS ENUM ('pending', 'accepted', 'rejected');
 CREATE TYPE "CancellationStatus" AS ENUM ('pending', 'accepted', 'rejected');
@@ -38,6 +39,7 @@ CREATE TABLE items (
     author VARCHAR,
     description TEXT,
     condition "ItemCondition" DEFAULT 'new',
+    campus "Campus" NOT NULL DEFAULT 'toyonaka',
     category VARCHAR,
     price INT DEFAULT 0,
     status "ItemStatus" DEFAULT 'available',

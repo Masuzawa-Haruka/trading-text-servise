@@ -5,8 +5,15 @@ import { useRouter } from "next/navigation";
 import {
   createItem,
   uploadItemImages,
+  type Campus,
   type ItemCondition,
 } from "@/lib/items/api";
+
+const CAMPUS_OPTIONS: { value: Campus; label: string }[] = [
+  { value: "toyonaka", label: "豊中キャンパス" },
+  { value: "suita", label: "吹田キャンパス" },
+  { value: "minoh", label: "箕面キャンパス" },
+];
 
 const OSAKA_UNIV_DEPARTMENTS = [
   "文学部 人文学科",
@@ -52,7 +59,7 @@ export default function SellPage() {
   const [department, setDepartment] = useState("");
   const [showDeptSuggestions, setShowDeptSuggestions] = useState(false);
   const [condition, setCondition] = useState<ItemCondition | "">("");
-  const [campus, setCampus] = useState("");
+  const [campus, setCampus] = useState<Campus | "">("");
   const [price, setPrice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -138,6 +145,7 @@ export default function SellPage() {
         author: normalizedAuthor || undefined,
         description: normalizedDescription || undefined,
         condition,
+        campus,
         category: normalizedDepartment,
         price: parsedPrice,
         image_urls: imageUrls,
@@ -283,15 +291,17 @@ export default function SellPage() {
             </label>
             <select
               value={campus}
-              onChange={(e) => setCampus(e.target.value)}
+              onChange={(e) => setCampus(e.target.value as Campus | "")}
               className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">選択してください</option>
-              <option value="豊中キャンパス">豊中キャンパス</option>
-              <option value="吹田キャンパス">吹田キャンパス</option>
-              <option value="箕面キャンパス">箕面キャンパス</option>
+              {CAMPUS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
-            <p className="mt-1 text-xs text-slate-500">キャンパスは現在DB保存対象外です</p>
+            <p className="mt-1 text-xs text-slate-500">出品者が主に受け渡ししやすいキャンパスです</p>
           </div>
         </section>
 

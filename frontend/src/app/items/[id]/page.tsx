@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { conditionLabel, getItem, type Item } from "@/lib/items/api";
+import { campusLabel, conditionLabel, getItem, type Item } from "@/lib/items/api";
 
 export default function ItemDetailPage() {
   const params = useParams();
@@ -109,6 +109,9 @@ export default function ItemDetailPage() {
 
           <div className="font-bold text-slate-500">状態</div>
           <div className="text-slate-900">{conditionLabel(item.condition)}</div>
+
+          <div className="font-bold text-slate-500">キャンパス</div>
+          <div className="text-slate-900">{campusLabel(item.campus)}</div>
 
           <div className="font-bold text-slate-500">カテゴリ</div>
           <div className="text-slate-900">{item.category ?? "未設定"}</div>

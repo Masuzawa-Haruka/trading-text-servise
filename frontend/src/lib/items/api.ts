@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 export const ITEM_IMAGE_BUCKET = "item-images";
 
 export type ItemCondition = "new" | "used_good" | "used_bad";
+export type Campus = "toyonaka" | "suita" | "minoh";
 export type ItemStatus = "available" | "matching" | "completed" | "canceled";
 
 export type ItemImage = {
@@ -21,6 +22,7 @@ export type Item = {
   author: string | null;
   description: string | null;
   condition: ItemCondition;
+  campus: Campus;
   category: string | null;
   price: number;
   status: ItemStatus;
@@ -31,6 +33,7 @@ export type Item = {
 
 export type GetItemsParams = {
   q?: string;
+  campus?: Campus;
   category?: string;
   condition?: ItemCondition;
   status?: ItemStatus;
@@ -41,6 +44,7 @@ export type CreateItemPayload = {
   author?: string;
   description?: string;
   condition: ItemCondition;
+  campus: Campus;
   category?: string;
   price: number;
   image_urls?: string[];
@@ -127,6 +131,17 @@ export function conditionLabel(condition: ItemCondition): string {
       return "目立った傷や汚れなし";
     case "used_bad":
       return "傷や汚れあり";
+  }
+}
+
+export function campusLabel(campus: Campus): string {
+  switch (campus) {
+    case "toyonaka":
+      return "豊中キャンパス";
+    case "suita":
+      return "吹田キャンパス";
+    case "minoh":
+      return "箕面キャンパス";
   }
 }
 

@@ -115,6 +115,7 @@ test('POST /api/items rejects invalid image_urls elements before usecase executi
     body: {
       title: 'ミクロ経済学',
       condition: 'used_good',
+      campus: 'toyonaka',
       image_urls: ['https://example.com/a.jpg', '   '],
     },
   });
@@ -136,6 +137,7 @@ test('POST /api/items trims optional strings and image URLs before create usecas
         author: '石村園子',
         description: undefined,
         condition: 'used_good',
+        campus: 'toyonaka',
         category: '数学',
         price: 0,
         status: 'available',
@@ -153,6 +155,7 @@ test('POST /api/items trims optional strings and image URLs before create usecas
       author: ' 石村園子 ',
       description: '   ',
       condition: 'used_good',
+      campus: 'toyonaka',
       category: ' 数学 ',
       price: 0,
       image_urls: [' https://example.com/a.jpg '],
@@ -166,6 +169,7 @@ test('POST /api/items trims optional strings and image URLs before create usecas
     author: '石村園子',
     description: undefined,
     condition: 'used_good',
+    campus: 'toyonaka',
     category: '数学',
     price: 0,
     image_urls: ['https://example.com/a.jpg'],

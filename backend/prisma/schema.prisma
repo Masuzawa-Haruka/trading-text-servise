@@ -25,6 +25,12 @@ enum ItemCondition {
   used_bad
 }
 
+enum Campus {
+  toyonaka
+  suita
+  minoh
+}
+
 enum TransactionStatus {
   proposing
   scheduled
@@ -98,6 +104,7 @@ model Item {
   author      String?       // 著者名（任意）
   description String?
   condition   ItemCondition @default(new)
+  campus      Campus        @default(toyonaka)
   category    String?
   price       Int           @default(0)
   status      ItemStatus    @default(available)

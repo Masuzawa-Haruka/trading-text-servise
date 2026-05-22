@@ -19,6 +19,11 @@ export type ItemCondition = 'new' | 'used_good' | 'used_bad';
 /** コントローラーでのバリデーション（ホワイトリスト検証）に使う */
 export const VALID_ITEM_CONDITIONS: ItemCondition[] = ['new', 'used_good', 'used_bad'];
 
+/** 出品時に指定できる大阪大学キャンパス */
+export type Campus = 'toyonaka' | 'suita' | 'minoh';
+
+/** コントローラーでのバリデーション（ホワイトリスト検証）に使う */
+export const VALID_CAMPUSES: Campus[] = ['toyonaka', 'suita', 'minoh'];
 
 /**
  * 出品エンティティ（DBのitemsテーブル1行に対応するデータ構造）
@@ -31,6 +36,7 @@ export interface ItemEntity {
   author: string | null;      // 著者名（任意）
   description: string | null; // 詳細説明（任意）
   condition: ItemCondition;   // コンディション
+  campus: Campus;             // 受け渡し候補キャンパス
   category: string | null;    // 科目カテゴリ（任意・検索用）
   price: number;              // 価格（0円推奨）
   status: ItemStatus;         // 出品のステータス
@@ -49,6 +55,7 @@ export interface CreateItemInput {
   author?: string;
   description?: string;
   condition: ItemCondition;
+  campus: Campus;
   category?: string;
   price?: number;
   /** Supabase Storageへのアップロード済みURL。先頭がメイン画像（display_order=0）。最大5枚。 */
@@ -61,6 +68,7 @@ export interface CreateItemInput {
  */
 export interface GetItemsFilter {
   q?: string;
+  campus?: Campus;
   category?: string;
   condition?: ItemCondition;
   status?: ItemStatus;

@@ -13,10 +13,12 @@ import { GetItemDetailsUseCase } from '../../usecases/GetItemDetailsUseCase';
 import { UpdateItemStatusUseCase } from '../../usecases/UpdateItemStatusUseCase';
 import {
   ItemCondition,
+  Campus,
   ItemStatus,
   GetItemsFilter,
   VALID_ITEM_STATUSES,
   VALID_ITEM_CONDITIONS,
+  VALID_CAMPUSES,
 } from '../../domain/item';
 import { NotFoundError, ForbiddenError, ValidationError } from '../../domain/errors';
 import { INT32_MAX } from '../../lib/validation';
@@ -39,6 +41,7 @@ export class ItemController {
   getItems = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const rawCategory = req.query.category;
+      const rawCampus = req.query.campus;
       const rawCondition = req.query.condition;
       const rawStatus = req.query.status;
       const rawQ = req.query.q;
@@ -47,6 +50,10 @@ export class ItemController {
         // 文字列かつホワイトリスト内の値のみ受け付ける
         q: normalizeQueryString(rawQ),
         category: normalizeQueryString(rawCategory),
+        campus:
+          typeof rawCampus === 'string' && VALID_CAMPUSES.includes(rawCampus as Campus)
+            ? (rawCampus as Campus)
+            : undefined,
         condition:
           typeof rawCondition === 'string' && VALID_ITEM_CONDITIONS.includes(rawCondition as ItemCondition)
             ? (rawCondition as ItemCondition)
@@ -102,7 +109,7 @@ export class ItemController {
         return;
       }
 
-      const { title, author, description, condition, category, price, image_urls } = req.body;
+      const { title, author, description, condition, campus, category, price, image_urls } = req.body;
 
       // title: 非空文字列であることを検証
       if (typeof title !== 'string' || title.trim() === '') {
@@ -132,6 +139,13 @@ export class ItemController {
       if (!VALID_ITEM_CONDITIONS.includes(condition)) {
         res.status(400).json({
           error: `condition は ${VALID_ITEM_CONDITIONS.join(', ')} のいずれかで指定してください`,
+        });
+        return;
+      }
+
+      if (!VALID_CAMPUSES.includes(campus)) {
+        res.status(400).json({
+          error: `campus は ${VALID_CAMPUSES.join(', ')} のいずれかで指定してください`,
         });
         return;
       }
@@ -173,6 +187,7 @@ export class ItemController {
         author: normalizedAuthor,
         description: normalizedDescription,
         condition,
+        campus,
         category: normalizedCategory,
         price,
         image_urls: normalizedImageUrls,
