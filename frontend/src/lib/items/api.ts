@@ -1,8 +1,9 @@
 import { apiFetch } from "@/lib/api/client";
-import { MOCK_AUTH_ENABLED } from "@/lib/auth/mock";
+import { MOCK_AUTH_ENABLED, MOCK_USER_ID } from "@/lib/auth/mock";
 import { createClient } from "@/lib/supabase/client";
 
 export const ITEM_IMAGE_BUCKET = "item-images";
+const MOCK_ITEMS_STORAGE_KEY = "mock_api_items";
 
 export type ItemCondition = "new" | "used_good" | "used_bad";
 export type Campus = "toyonaka" | "suita" | "minoh";
@@ -54,6 +55,10 @@ export type CreateItemPayload = {
 };
 
 export async function getItems(params: GetItemsParams = {}): Promise<Item[]> {
+  if (MOCK_AUTH_ENABLED) {
+    return getMockItems(params);
+  }
+
   const searchParams = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
@@ -71,6 +76,14 @@ export async function getItems(params: GetItemsParams = {}): Promise<Item[]> {
 }
 
 export async function getItem(id: string): Promise<Item> {
+  if (MOCK_AUTH_ENABLED) {
+    const item = getMockItems({ status: undefined }).find((mockItem) => mockItem.id === id);
+    if (!item) {
+      throw new Error("出品が見つかりません");
+    }
+    return item;
+  }
+
   const response = await apiFetch(`/api/items/${encodeURIComponent(id)}`, {
     requireAuth: false,
   });
@@ -79,6 +92,10 @@ export async function getItem(id: string): Promise<Item> {
 }
 
 export async function createItem(payload: CreateItemPayload): Promise<Item> {
+  if (MOCK_AUTH_ENABLED) {
+    return createMockItem(payload);
+  }
+
   const response = await apiFetch("/api/items", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -169,6 +186,80 @@ async function parseJsonResponse<T>(response: Response, fallbackMessage: string)
 function getFileExtension(fileName: string): string {
   const match = fileName.match(/\.[a-zA-Z0-9]+$/);
   return match ? match[0].toLowerCase() : "";
+}
+
+function getMockItems(params: GetItemsParams): Item[] {
+  const items = readMockItems();
+  const normalizedQuery = params.q?.trim().toLowerCase();
+  const status = params.status ?? "available";
+
+  return items.filter((item) => {
+    if (status && item.status !== status) return false;
+    if (params.campus && item.campus !== params.campus) return false;
+    if (params.condition && item.condition !== params.condition) return false;
+    if (params.category && !item.category?.includes(params.category)) return false;
+    if (!normalizedQuery) return true;
+
+    return [item.title, item.author, item.description, item.category]
+      .filter((value): value is string => typeof value === "string")
+      .some((value) => value.toLowerCase().includes(normalizedQuery));
+  });
+}
+
+function createMockItem(payload: CreateItemPayload): Item {
+  const now = new Date().toISOString();
+  const itemId = crypto.randomUUID();
+  const item: Item = {
+    id: itemId,
+    seller_id: MOCK_USER_ID,
+    title: payload.title,
+    author: payload.author ?? null,
+    description: payload.description ?? null,
+    condition: payload.condition,
+    campus: payload.campus,
+    handoff_location: payload.handoff_location,
+    category: payload.category ?? null,
+    price: payload.price,
+    status: "available",
+    images: (payload.image_urls ?? []).map((url, index) => ({
+      id: crypto.randomUUID(),
+      item_id: itemId,
+      image_url: url,
+      display_order: index,
+      created_at: now,
+    })),
+    created_at: now,
+    updated_at: now,
+  };
+
+  const items = readMockItems();
+  writeMockItems([item, ...items]);
+  return item;
+}
+
+function readMockItems(): Item[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const raw = window.localStorage.getItem(MOCK_ITEMS_STORAGE_KEY);
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeMockItems(items: Item[]): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(MOCK_ITEMS_STORAGE_KEY, JSON.stringify(items));
 }
 
 function fileToDataUrl(file: File): Promise<string> {

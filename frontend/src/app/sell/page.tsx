@@ -75,6 +75,7 @@ type ImageDraft = {
 export default function SellPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const imagesRef = useRef<ImageDraft[]>([]);
 
   const [images, setImages] = useState<ImageDraft[]>([]);
@@ -217,6 +218,14 @@ export default function SellPage() {
             onChange={(event) => handleAddImages(event.target.files)}
             className="sr-only"
           />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(event) => handleAddImages(event.target.files)}
+            className="sr-only"
+          />
           <div className="flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none]">
             {images.map((image, idx) => (
               <div key={image.previewUrl} className="relative size-20 shrink-0 rounded border border-slate-200 bg-slate-100">
@@ -232,13 +241,22 @@ export default function SellPage() {
               </div>
             ))}
             {images.length < 5 && (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="grid size-20 shrink-0 place-items-center rounded border border-dashed border-slate-300 bg-slate-100 text-slate-400 transition-colors hover:bg-slate-200"
-              >
-                <span className="text-2xl">+</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="grid size-20 shrink-0 place-items-center rounded border border-dashed border-blue-200 bg-blue-50 text-center text-[11px] font-bold leading-tight text-[#0047c7] transition-colors hover:bg-blue-100"
+                >
+                  カメラ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="grid size-20 shrink-0 place-items-center rounded border border-dashed border-slate-300 bg-slate-100 text-center text-[11px] font-bold leading-tight text-slate-500 transition-colors hover:bg-slate-200"
+                >
+                  ファイル
+                </button>
+              </>
             )}
           </div>
         </section>
