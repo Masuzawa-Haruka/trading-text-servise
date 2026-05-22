@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 
 export const ITEM_IMAGE_BUCKET = "item-images";
 const MOCK_ITEMS_STORAGE_KEY = "mock_api_items";
+const MOCK_SELLER_ID = "22222222-2222-4222-8222-222222222222";
 
 export type ItemCondition = "new" | "used_good" | "used_bad";
 export type Campus = "toyonaka" | "suita" | "minoh";
@@ -244,7 +245,8 @@ function readMockItems(): Item[] {
 
   const raw = window.localStorage.getItem(MOCK_ITEMS_STORAGE_KEY);
   if (!raw) {
-    return [];
+    writeMockItems(DEFAULT_MOCK_ITEMS);
+    return DEFAULT_MOCK_ITEMS;
   }
 
   try {
@@ -254,6 +256,41 @@ function readMockItems(): Item[] {
     return [];
   }
 }
+
+const DEFAULT_MOCK_ITEMS: Item[] = [
+  {
+    id: "33333333-3333-4333-8333-333333333333",
+    seller_id: MOCK_SELLER_ID,
+    title: "基礎からの線形代数",
+    author: "石村園子",
+    description: "授業で使いました。書き込みは少なめです。",
+    condition: "used_good",
+    campus: "toyonaka",
+    handoff_location: "総合図書館前",
+    category: "理学部 数学科",
+    price: 0,
+    status: "available",
+    images: [],
+    created_at: "2026-05-20T00:00:00.000Z",
+    updated_at: "2026-05-20T00:00:00.000Z",
+  },
+  {
+    id: "44444444-4444-4444-8444-444444444444",
+    seller_id: MOCK_SELLER_ID,
+    title: "ミクロ経済学の基礎",
+    author: "大山道広",
+    description: "表紙に少し折れがあります。中身は問題なく読めます。",
+    condition: "used_good",
+    campus: "suita",
+    handoff_location: "理工学図書館前",
+    category: "経済学部 経済・経営学科",
+    price: 300,
+    status: "available",
+    images: [],
+    created_at: "2026-05-19T00:00:00.000Z",
+    updated_at: "2026-05-19T00:00:00.000Z",
+  },
+];
 
 function writeMockItems(items: Item[]): void {
   if (typeof window === "undefined") {
