@@ -129,7 +129,21 @@ CREATE TABLE evaluations (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 8. Notifications
+-- 8. Reports
+CREATE TABLE reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    transaction_id UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    reporter_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reported_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reason VARCHAR NOT NULL,
+    detail TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT reports_reporter_not_reported CHECK (reporter_id <> reported_user_id),
+    CONSTRAINT reports_transaction_reporter_unique UNIQUE (transaction_id, reporter_id)
+);
+
+-- 9. Notifications
 CREATE TABLE notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -187,6 +201,7 @@ ALTER TABLE schedule_candidates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE price_offers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evaluations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cancellation_requests ENABLE ROW LEVEL SECURITY;
@@ -304,7 +319,27 @@ CREATE POLICY "Reviewers can insert evaluations" ON evaluations FOR INSERT
 WITH CHECK (auth.uid() = reviewer_id);
 
 -- ------------------------------------------
--- 8. Notifications
+-- 8. Reports
+-- 通報者本人のみ閲覧可能
+CREATE POLICY "Reporters can view own reports" ON reports FOR SELECT
+USING (auth.uid() = reporter_id);
+-- 取引当事者が、取引相手だけを通報可能
+CREATE POLICY "Parties can insert reports against counterparty" ON reports FOR INSERT
+WITH CHECK (
+    auth.uid() = reporter_id
+    AND reporter_id <> reported_user_id
+    AND EXISTS (
+        SELECT 1 FROM transactions t
+        WHERE t.id = reports.transaction_id
+        AND (
+            (t.seller_id = auth.uid() AND t.buyer_id = reports.reported_user_id)
+            OR (t.buyer_id = auth.uid() AND t.seller_id = reports.reported_user_id)
+        )
+    )
+);
+
+-- ------------------------------------------
+-- 9. Notifications
 -- 自分の通知のみ閲覧可能
 CREATE POLICY "Users can view own notifications" ON notifications FOR SELECT 
 USING (auth.uid() = user_id);
@@ -313,7 +348,7 @@ CREATE POLICY "Users can update own notifications" ON notifications FOR UPDATE
 USING (auth.uid() = user_id);
 
 -- ------------------------------------------
--- 9. Cancellation History
+-- 10. Cancellation History
 -- 取引の当事者のみ閲覧可能
 CREATE POLICY "Parties can view cancellation history" ON cancellation_requests FOR SELECT 
 USING (
@@ -335,7 +370,7 @@ WITH CHECK (
 );
 
 -- ------------------------------------------
--- 10. Item Images
+-- 11. Item Images
 -- 誰でも閲覧可能
 CREATE POLICY "Users can view all item images" ON item_images FOR SELECT USING (auth.role() = 'authenticated');
 -- 出品者のみ画像を追加・編集可能
@@ -349,7 +384,7 @@ USING (
 );
 
 -- ------------------------------------------
--- 11. Schedule Candidates
+-- 12. Schedule Candidates
 -- 取引の当事者のみ閲覧可能
 CREATE POLICY "Parties can view schedule candidates" ON schedule_candidates FOR SELECT
 USING (
@@ -393,7 +428,7 @@ WITH CHECK (
 );
 
 -- ------------------------------------------
--- 12. Location Areas & Spots
+-- 13. Location Areas & Spots
 -- 誰でも場所マスターを閲覧可能
 CREATE POLICY "Users can view location areas" ON location_areas FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Users can view location spots" ON location_spots FOR SELECT USING (auth.role() = 'authenticated');
@@ -416,6 +451,7 @@ CREATE TRIGGER update_schedule_proposals_modtime BEFORE UPDATE ON schedule_propo
 CREATE TRIGGER update_schedule_candidates_modtime BEFORE UPDATE ON schedule_candidates FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_price_offers_modtime BEFORE UPDATE ON price_offers FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_evaluations_modtime BEFORE UPDATE ON evaluations FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+CREATE TRIGGER update_reports_modtime BEFORE UPDATE ON reports FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_notifications_modtime BEFORE UPDATE ON notifications FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_cancellation_requests_modtime BEFORE UPDATE ON cancellation_requests FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_location_areas_modtime BEFORE UPDATE ON location_areas FOR EACH ROW EXECUTE PROCEDURE update_modified_column();

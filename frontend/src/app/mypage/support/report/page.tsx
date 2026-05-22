@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { submitReport } from "@/lib/reports/api";
 import { getTransactions, type Transaction } from "@/lib/transactions/api";
 import { getMyProfile } from "@/lib/users/api";
 
@@ -23,7 +24,7 @@ export default function ReportPage() {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedType, setSelectedType] = useState<ReportType | null>(null);
-  const [targetUser, setTargetUser] = useState("");
+  const [targetUserId, setTargetUserId] = useState("");
   const [transactionItem, setTransactionItem] = useState("");
   const [details, setDetails] = useState("");
   const [userTransactions, setUserTransactions] = useState<{ tx: Transaction; itemTitle: string }[]>([]);
@@ -31,6 +32,8 @@ export default function ReportPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loadingTransactions, setLoadingTransactions] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -80,6 +83,7 @@ export default function ReportPage() {
   }, [router]);
 
   const handleNext = () => {
+    setSubmitError(null);
     if (!selectedType) {
       alert("通報内容を選択してください");
       return;
@@ -88,7 +92,12 @@ export default function ReportPage() {
   };
 
   const handleGoToConfirm = () => {
-    if (!targetUser || !details) {
+    setSubmitError(null);
+    if (!transactionItem) {
+      alert("関連する取引を選択してください");
+      return;
+    }
+    if (!targetUserId || !details.trim()) {
       alert("対象ユーザーと詳細内容は必須です");
       return;
     }
@@ -97,20 +106,69 @@ export default function ReportPage() {
 
   const handleTransactionChange = (txId: string) => {
     setTransactionItem(txId);
+    setSubmitError(null);
     if (txId) {
       const tx = userTransactions.find(t => t.tx.id === txId)?.tx;
       if (tx && currentUserId) {
         const counterpartyId = tx.buyer_id === currentUserId ? tx.seller_id : tx.buyer_id;
-        const counterparty = relatedUsers.find((user) => user.id === counterpartyId);
-        setTargetUser(counterparty?.nickname ?? "");
+        setTargetUserId(counterpartyId);
       }
+      return;
+    }
+    setTargetUserId("");
+  };
+
+  const handleTargetUserChange = (userId: string) => {
+    setTargetUserId(userId);
+    setSubmitError(null);
+    if (!userId || !currentUserId || !transactionItem) {
+      return;
+    }
+
+    const selectedTransaction = userTransactions.find((entry) => entry.tx.id === transactionItem)?.tx;
+    const selectedCounterpartyId =
+      selectedTransaction?.buyer_id === currentUserId
+        ? selectedTransaction.seller_id
+        : selectedTransaction?.buyer_id;
+
+    if (selectedCounterpartyId !== userId) {
+      setTransactionItem("");
     }
   };
 
-  const handleSubmit = () => {
-    alert("通報を受け付けました");
-    router.push("/mypage/support");
+  const handleSubmit = async () => {
+    if (!selectedType || !transactionItem || !targetUserId || !details.trim()) {
+      setSubmitError("通報に必要な項目が不足しています");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setSubmitError(null);
+      await submitReport({
+        transaction_id: transactionItem,
+        reported_user_id: targetUserId,
+        reason: selectedType.id,
+        detail: details.trim(),
+      });
+      router.push("/mypage/support");
+    } catch (caughtError) {
+      const message = caughtError instanceof Error ? caughtError.message : "通報の送信に失敗しました";
+      setSubmitError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  const selectedTargetUserName =
+    relatedUsers.find((user) => user.id === targetUserId)?.nickname ?? "";
+  const filteredUserTransactions = targetUserId
+    ? userTransactions.filter(({ tx }) => {
+        if (!currentUserId) return false;
+        const counterpartyId = tx.buyer_id === currentUserId ? tx.seller_id : tx.buyer_id;
+        return counterpartyId === targetUserId;
+      })
+    : userTransactions;
 
   return (
     <main className="mx-auto min-h-dvh max-w-[430px] bg-white pb-24 text-slate-900">
@@ -234,13 +292,13 @@ export default function ReportPage() {
                 対象ユーザー <span className="rounded bg-red-100 px-1 text-[10px] text-red-500">必須</span>
               </label>
               <select
-                value={targetUser}
-                onChange={(e) => setTargetUser(e.target.value)}
+                value={targetUserId}
+                onChange={(e) => handleTargetUserChange(e.target.value)}
                 className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
               >
                 <option value="">{loadingTransactions ? "読み込み中..." : "対象ユーザーを選択"}</option>
                 {relatedUsers.map((u) => (
-                  <option key={u.id} value={u.nickname}>{u.nickname}</option>
+                  <option key={u.id} value={u.id}>{u.nickname}</option>
                 ))}
               </select>
               <p className="mt-1 text-[10px] text-slate-500">※同じ期間（提案中および取引終了後1週間以内）に関連したユーザーが表示されます</p>
@@ -248,7 +306,7 @@ export default function ReportPage() {
 
             <div>
               <label className="mb-1 block text-sm font-bold text-slate-700">
-                取引する教科書 <span className="text-xs font-normal text-slate-400">(任意)</span>
+                関連する取引 <span className="rounded bg-red-100 px-1 text-[10px] text-red-500">必須</span>
               </label>
               <select
                 value={transactionItem}
@@ -256,11 +314,11 @@ export default function ReportPage() {
                 className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
               >
                 <option value="">{loadingTransactions ? "読み込み中..." : "取引を選択"}</option>
-                {userTransactions.map(({tx, itemTitle}) => (
+                {filteredUserTransactions.map(({tx, itemTitle}) => (
                   <option key={tx.id} value={tx.id}>{itemTitle} ({statusLabel(tx.status)})</option>
                 ))}
               </select>
-              <p className="mt-1 text-[10px] text-slate-500">※関連する取引がある場合は選択してください</p>
+              <p className="mt-1 text-[10px] text-slate-500">※取引当事者であることを確認するため、関連する取引の選択が必要です</p>
             </div>
 
             <div>
@@ -271,6 +329,7 @@ export default function ReportPage() {
                 <textarea
                   value={details}
                   onChange={(e) => setDetails(e.target.value)}
+                  maxLength={1000}
                   placeholder="いつ・どこで・何があったかを&#13;&#10;できるだけ詳しくご記入ください"
                   rows={6}
                   className="w-full resize-none rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none"
@@ -295,7 +354,8 @@ export default function ReportPage() {
 
             <button
               onClick={handleGoToConfirm}
-              className="w-full rounded bg-[#0047c7] py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-700 mt-2"
+              disabled={loadingTransactions}
+              className="w-full rounded bg-[#0047c7] py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-700 mt-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
               確認画面へ
             </button>
@@ -325,7 +385,7 @@ export default function ReportPage() {
 
             <div className="border-b border-slate-100 pb-3">
               <h3 className="text-xs font-bold text-slate-500 mb-1">対象ユーザー</h3>
-              <p className="text-sm font-bold text-slate-900">{targetUser}</p>
+              <p className="text-sm font-bold text-slate-900">{selectedTargetUserName || "未選択"}</p>
             </div>
 
             <div className="border-b border-slate-100 pb-3">
@@ -354,11 +414,18 @@ export default function ReportPage() {
               </button>
               <button
                 onClick={handleSubmit}
-                className="flex-1 rounded bg-[#0047c7] py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
+                disabled={isSubmitting}
+                className="flex-1 rounded bg-[#0047c7] py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                送信する
+                {isSubmitting ? "送信中..." : "送信する"}
               </button>
             </div>
+
+            {submitError ? (
+              <div className="rounded-lg bg-red-50 px-3 py-2">
+                <p className="text-xs font-bold text-red-600">{submitError}</p>
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-8 rounded-lg bg-orange-50 p-4 border border-orange-100 text-orange-900">
