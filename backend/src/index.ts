@@ -15,12 +15,17 @@ import reportRoutes from './infrastructure/routes/reportRoutes';
 
 const app = express();
 const port = process.env.PORT || 3001;
+const host = process.env.HOST || '0.0.0.0';
 
 app.use(cors());
 app.use(express.json());
 
 app.get('/', (req, res) => {
   res.send('Backend Server is running');
+});
+
+app.get('/health', (req, res) => {
+  res.status(200).json({ ok: true });
 });
 
 app.use('/api/items', itemRoutes);
@@ -33,6 +38,6 @@ app.use('/api/evaluations', evaluationRoutes);
 app.use('/api/cancellations', cancellationRoutes);
 app.use('/api/reports', reportRoutes);
 
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+app.listen(Number(port), host, () => {
+  console.log(`Server is running at http://${host}:${port}`);
 });

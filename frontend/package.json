@@ -4,7 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:lan": "next dev -H 0.0.0.0",
     "dev:mock": "node scripts/dev-mock.mjs",
+    "dev:mock:lan": "node scripts/dev-mock.mjs --lan",
+    "check:api": "node scripts/check-api.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
