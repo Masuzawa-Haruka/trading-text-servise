@@ -4,64 +4,76 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SignOutButton } from "@/components/SignOutButton";
-import { getItem, getItems, type Item, type ItemStatus } from "@/lib/items/api";
+import { getItems, type Item, type ItemStatus } from "@/lib/items/api";
 import { getTransactions, type Transaction } from "@/lib/transactions/api";
 import { getMyProfile, type UserProfile } from "@/lib/users/api";
 
-type MyPageData = {
-  profile: UserProfile;
-  soldItems: Item[];
-  boughtTransactions: Array<{
-    transaction: Transaction;
-    item: Item | null;
-  }>;
+type BoughtTransaction = {
+  transaction: Transaction;
+  itemTitle: string;
 };
 
 export default function MyPage() {
   const router = useRouter();
-  const [data, setData] = useState<MyPageData | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [soldItems, setSoldItems] = useState<Item[]>([]);
+  const [boughtTransactions, setBoughtTransactions] = useState<BoughtTransaction[]>([]);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   useEffect(() => {
     let ignore = false;
 
     async function loadMyPage() {
+      let loadedProfile: UserProfile | null = null;
+
       try {
-        const [profile, itemsByStatus, transactions] = await Promise.all([
-          getMyProfile(),
+        setProfileLoading(true);
+        setHistoryLoading(true);
+        setError(null);
+        setHistoryError(null);
+
+        loadedProfile = await getMyProfile();
+        if (ignore) return;
+
+        setProfile(loadedProfile);
+        setProfileLoading(false);
+        const profileId = loadedProfile.id;
+
+        const [itemsByStatus, transactions] = await Promise.all([
           Promise.all(ITEM_STATUSES.map((status) => getItems({ status }))),
           getTransactions(),
         ]);
-        const allItems = itemsByStatus.flat();
-        const itemById = new Map(allItems.map((item) => [item.id, item]));
-        const boughtTransactions = await Promise.all(
-          transactions
-            .filter((transaction) => transaction.buyer_id === profile.id)
-            .map(async (transaction) => {
-              const cachedItem = itemById.get(transaction.item_id);
-              if (cachedItem) return { transaction, item: cachedItem };
-              try {
-                return { transaction, item: await getItem(transaction.item_id) };
-              } catch {
-                return { transaction, item: null };
-              }
-            }),
-        );
+        if (ignore) return;
 
-        if (!ignore) {
-          setData({
-            profile,
-            soldItems: allItems.filter((item) => item.seller_id === profile.id),
-            boughtTransactions,
-          });
-        }
+        const allItems = itemsByStatus.flat();
+        setSoldItems(allItems.filter((item) => item.seller_id === profileId));
+        setBoughtTransactions(
+          transactions
+            .filter((transaction) => transaction.buyer_id === profileId)
+            .map((transaction) => ({
+              transaction,
+              itemTitle: transaction.item_title ?? "取引中の参考書",
+            })),
+        );
       } catch (caughtError) {
         if (!ignore) {
           if (caughtError instanceof Error && caughtError.message === "ログインが必要です") {
             router.replace("/login");
             return;
           }
-          setError("マイページ情報を取得できませんでした");
+          if (loadedProfile === null) {
+            setError("プロフィールを取得できませんでした");
+          } else {
+            setHistoryError("取引・出品履歴を取得できませんでした");
+          }
+        }
+      } finally {
+        if (!ignore) {
+          setProfileLoading(false);
+          setHistoryLoading(false);
         }
       }
     }
@@ -72,8 +84,6 @@ export default function MyPage() {
       ignore = true;
     };
   }, [router]);
-
-  const profile = data?.profile;
 
   return (
     <main className="mx-auto min-h-dvh max-w-[430px] bg-[#f5f7fb] pb-24">
@@ -93,7 +103,7 @@ export default function MyPage() {
           </div>
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-lg font-bold text-slate-900">
-              {profile?.nickname ?? "読み込み中..."}
+              {profileLoading ? "読み込み中..." : profile?.nickname ?? "プロフィール未取得"}
             </h2>
             <p className="truncate text-xs text-slate-500">{profile?.email ?? ""}</p>
             <Link href="/mypage/score" className="mt-1 inline-flex items-center gap-2 text-sm text-slate-600 hover:opacity-80">
@@ -120,15 +130,19 @@ export default function MyPage() {
         <div className="divide-y divide-slate-100 px-4 py-2">
           <div className="py-2">
             <h3 className="mb-2 text-sm font-bold text-slate-500">
-              出品した参考書 ({data?.soldItems.length ?? 0})
+              出品した参考書 ({soldItems.length})
             </h3>
-            {data === null ? (
+            {historyLoading ? (
               <p className="text-xs text-slate-400">読み込み中...</p>
-            ) : data.soldItems.length > 0 ? (
+            ) : historyError ? (
+              <p className="text-xs font-bold text-red-500">{historyError}</p>
+            ) : soldItems.length > 0 ? (
               <ul className="space-y-2">
-                {data.soldItems.map((item) => (
+                {soldItems.map((item) => (
                   <li key={item.id} className="flex justify-between rounded bg-slate-50 p-2 text-sm text-slate-700">
-                    <span className="flex-1 truncate">{item.title}</span>
+                    <Link href={`/items/${item.id}`} className="flex-1 truncate hover:underline">
+                      {item.title}
+                    </Link>
                     <span className="ml-2 text-xs font-bold text-blue-600">{statusLabel(item.status)}</span>
                   </li>
                 ))}
@@ -141,17 +155,19 @@ export default function MyPage() {
         <div className="divide-y divide-slate-100 px-4 py-2">
           <div className="py-2">
             <h3 className="mb-2 text-sm font-bold text-slate-500">
-              購入取引 ({data?.boughtTransactions.length ?? 0})
+              購入取引 ({boughtTransactions.length})
             </h3>
-            {data === null ? (
+            {historyLoading ? (
               <p className="text-xs text-slate-400">読み込み中...</p>
-            ) : data.boughtTransactions.length > 0 ? (
+            ) : historyError ? (
+              <p className="text-xs font-bold text-red-500">{historyError}</p>
+            ) : boughtTransactions.length > 0 ? (
               <ul className="space-y-2">
-                {data.boughtTransactions.map(({ transaction, item }) => (
+                {boughtTransactions.map(({ transaction, itemTitle }) => (
                   <li key={transaction.id} className="flex justify-between rounded bg-slate-50 p-2 text-sm text-slate-700">
                     <span className="flex-1 truncate">
                       <Link href={`/transactions/${transaction.id}`} className="hover:underline">
-                        {item?.title ?? "取引中の参考書"}
+                        {itemTitle}
                       </Link>
                     </span>
                     <span className="ml-2 text-xs font-bold text-blue-600">{statusLabel(transaction.status)}</span>
