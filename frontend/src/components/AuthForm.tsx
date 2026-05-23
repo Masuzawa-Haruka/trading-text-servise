@@ -155,7 +155,9 @@ export function AuthForm({ initialMode }: AuthFormProps) {
           {isSignup ? "阪大メールで新規登録" : "ログイン"}
         </h1>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          大阪大学のメールアドレスで認証します。
+          {isSignup
+            ? "登録後、入力した阪大メール宛に認証メールを送信します。"
+            : "大阪大学のメールアドレスで認証します。"}
         </p>
 
         <div className="mt-8 grid grid-cols-2 rounded border border-slate-200 bg-slate-50 p-1">
@@ -185,7 +187,7 @@ export function AuthForm({ initialMode }: AuthFormProps) {
               onChange={(event) => setEmail(event.target.value)}
               type="email"
               autoComplete="email"
-              placeholder="your.name@osaka-u.ac.jp"
+              placeholder="u123456a@osaka-u.ac.jp"
               className="mt-2 h-12 w-full rounded border border-slate-200 px-3 text-sm outline-none focus:border-[#0047c7]"
               required
             />
@@ -237,6 +239,12 @@ export function AuthForm({ initialMode }: AuthFormProps) {
             >
               確認メールを再送する
             </button>
+          ) : null}
+
+          {isSignup ? (
+            <p className="rounded border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold leading-5 text-blue-700">
+              「登録する」を押すと、入力したメールアドレス宛に認証メールが届きます。メール内のリンクを開くと登録が完了します。
+            </p>
           ) : null}
 
           <button
