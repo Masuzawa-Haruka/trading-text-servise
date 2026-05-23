@@ -74,6 +74,12 @@ const mockAuthClient = {
       error: null,
     };
   },
+  async resend() {
+    return {
+      data: {},
+      error: null,
+    };
+  },
   async exchangeCodeForSession() {
     return {
       data: {

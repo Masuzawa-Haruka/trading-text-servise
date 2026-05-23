@@ -11,6 +11,11 @@ export type SignUpWithPasswordInput = PasswordAuthInput & {
   emailRedirectTo: string;
 };
 
+export type ResendSignupConfirmationInput = {
+  email: string;
+  emailRedirectTo: string;
+};
+
 export function normalizeAuthEmail(email: string): string {
   return email.trim().toLowerCase();
 }
@@ -51,4 +56,47 @@ export async function signUpWithPassword(
       emailRedirectTo: input.emailRedirectTo,
     },
   });
+}
+
+export async function resendSignupConfirmation(
+  supabase: SupabaseClient,
+  input: ResendSignupConfirmationInput,
+) {
+  return supabase.auth.resend({
+    type: "signup",
+    email: input.email,
+    options: {
+      emailRedirectTo: input.emailRedirectTo,
+    },
+  });
+}
+
+export function getPasswordAuthErrorMessage(errorMessage: string): string {
+  const normalizedMessage = errorMessage.toLowerCase();
+
+  if (normalizedMessage.includes("already registered") || normalizedMessage.includes("already exists")) {
+    return "このメールアドレスはすでに登録されています。ログインするか、確認メールを再送してください。";
+  }
+
+  if (normalizedMessage.includes("email not confirmed")) {
+    return "メール確認が完了していません。確認メールのリンクを開いてからログインしてください。";
+  }
+
+  if (normalizedMessage.includes("invalid login credentials")) {
+    return "メールアドレスまたはパスワードが正しくありません。";
+  }
+
+  if (normalizedMessage.includes("signup is disabled")) {
+    return "現在、新規登録は停止されています。時間を置いて再度お試しください。";
+  }
+
+  if (normalizedMessage.includes("rate limit") || normalizedMessage.includes("too many")) {
+    return "試行回数が多すぎます。しばらく時間を置いて再度お試しください。";
+  }
+
+  if (normalizedMessage.includes("database error")) {
+    return "ユーザー情報の作成に失敗しました。時間を置いて再度お試しください。";
+  }
+
+  return errorMessage || "認証処理に失敗しました。時間を置いて再度お試しください。";
 }

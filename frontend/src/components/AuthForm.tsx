@@ -4,7 +4,9 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  getPasswordAuthErrorMessage,
   normalizeAuthEmail,
+  resendSignupConfirmation,
   signInWithPassword,
   signUpWithPassword,
   validatePasswordAuthInput,
@@ -26,6 +28,7 @@ export function AuthForm({ initialMode }: AuthFormProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [canResendConfirmation, setCanResendConfirmation] = useState(false);
 
   const isSignup = initialMode === "signup";
 
@@ -33,6 +36,7 @@ export function AuthForm({ initialMode }: AuthFormProps) {
     event.preventDefault();
     setMessage(null);
     setError(null);
+    setCanResendConfirmation(false);
 
     const normalizedEmail = normalizeAuthEmail(email);
     const validationError = validatePasswordAuthInput({
@@ -59,11 +63,13 @@ export function AuthForm({ initialMode }: AuthFormProps) {
         });
 
         if (signUpError) {
-          setError(signUpError.message);
+          setError(getPasswordAuthErrorMessage(signUpError.message));
+          setCanResendConfirmation(true);
           return;
         }
 
         setMessage("確認メールを送信しました。メール内のリンクから登録を完了してください。");
+        setCanResendConfirmation(true);
         return;
       }
 
@@ -73,7 +79,8 @@ export function AuthForm({ initialMode }: AuthFormProps) {
       });
 
       if (signInError) {
-        setError(signInError.message);
+        setError(getPasswordAuthErrorMessage(signInError.message));
+        setCanResendConfirmation(signInError.message.toLowerCase().includes("email not confirmed"));
         return;
       }
 
@@ -81,6 +88,46 @@ export function AuthForm({ initialMode }: AuthFormProps) {
       router.refresh();
     } catch {
       setError("認証処理に失敗しました。時間を置いて再度お試しください。");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleResendConfirmation() {
+    setMessage(null);
+    setError(null);
+
+    const normalizedEmail = normalizeAuthEmail(email);
+    if (!normalizedEmail) {
+      setError("確認メールを再送するメールアドレスを入力してください。");
+      return;
+    }
+
+    const validationError = validatePasswordAuthInput({
+      email: normalizedEmail,
+      password: password || "********",
+    });
+    if (validationError && validationError.includes("メールアドレス")) {
+      setError(validationError);
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const { error: resendError } = await resendSignupConfirmation(createClient(), {
+        email: normalizedEmail,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(getNextPath())}`,
+      });
+
+      if (resendError) {
+        setError(getPasswordAuthErrorMessage(resendError.message));
+        return;
+      }
+
+      setMessage("確認メールを再送しました。メール内のリンクから登録を完了してください。");
+      setCanResendConfirmation(true);
+    } catch {
+      setError("確認メールの再送に失敗しました。時間を置いて再度お試しください。");
     } finally {
       setIsSubmitting(false);
     }
@@ -179,6 +226,17 @@ export function AuthForm({ initialMode }: AuthFormProps) {
             <p className="rounded border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700">
               {message}
             </p>
+          ) : null}
+
+          {canResendConfirmation ? (
+            <button
+              type="button"
+              onClick={handleResendConfirmation}
+              disabled={isSubmitting}
+              className="w-full rounded border border-blue-100 bg-white px-3 py-2 text-sm font-bold text-[#0047c7] disabled:opacity-60"
+            >
+              確認メールを再送する
+            </button>
           ) : null}
 
           <button
