@@ -207,10 +207,13 @@ export function AuthForm({ initialMode }: AuthFormProps) {
             </label>
           ) : null}
 
-          <label className="block">
-            <span className="text-xs font-bold text-slate-700">パスワード</span>
-            <span className="relative mt-2 block">
+          <div>
+            <label htmlFor="auth-password" className="text-xs font-bold text-slate-700">
+              パスワード
+            </label>
+            <div className="relative mt-2">
               <input
+                id="auth-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 type={isPasswordVisible ? "text" : "password"}
@@ -220,14 +223,16 @@ export function AuthForm({ initialMode }: AuthFormProps) {
               />
               <button
                 type="button"
+                onPointerDown={(event) => event.preventDefault()}
                 onClick={() => setIsPasswordVisible((current) => !current)}
                 aria-label={isPasswordVisible ? "パスワードを隠す" : "パスワードを表示する"}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs font-bold text-[#0047c7]"
+                aria-pressed={isPasswordVisible}
+                className="absolute right-2 top-1/2 z-10 min-h-8 -translate-y-1/2 rounded px-2 py-1 text-xs font-bold text-[#0047c7]"
               >
                 {isPasswordVisible ? "隠す" : "表示"}
               </button>
-            </span>
-          </label>
+            </div>
+          </div>
 
           {error ? (
             <p className="rounded border border-red-100 bg-red-50 px-3 py-2 text-sm font-bold text-red-600">
