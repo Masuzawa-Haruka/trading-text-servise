@@ -22,6 +22,7 @@ export default function MyPage() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let ignore = false;
@@ -65,9 +66,17 @@ export default function MyPage() {
             return;
           }
           if (loadedProfile === null) {
-            setError("プロフィールを取得できませんでした");
+            setError(
+              caughtError instanceof Error
+                ? caughtError.message
+                : "プロフィールを取得できませんでした",
+            );
           } else {
-            setHistoryError("取引・出品履歴を取得できませんでした");
+            setHistoryError(
+              caughtError instanceof Error
+                ? caughtError.message
+                : "取引・出品履歴を取得できませんでした",
+            );
           }
         }
       } finally {
@@ -83,7 +92,7 @@ export default function MyPage() {
     return () => {
       ignore = true;
     };
-  }, [router]);
+  }, [reloadKey, router]);
 
   return (
     <main className="mx-auto min-h-dvh max-w-[430px] bg-[#f5f7fb] pb-24">
@@ -123,6 +132,13 @@ export default function MyPage() {
       {error ? (
         <section className="mt-3 bg-white px-4 py-3">
           <p className="text-sm font-bold text-red-600">{error}</p>
+          <button
+            type="button"
+            onClick={() => setReloadKey((current) => current + 1)}
+            className="mt-2 rounded-full border border-red-200 px-3 py-1.5 text-xs font-bold text-red-600"
+          >
+            再読み込み
+          </button>
         </section>
       ) : null}
 
@@ -135,7 +151,16 @@ export default function MyPage() {
             {historyLoading ? (
               <p className="text-xs text-slate-400">読み込み中...</p>
             ) : historyError ? (
-              <p className="text-xs font-bold text-red-500">{historyError}</p>
+              <div>
+                <p className="text-xs font-bold text-red-500">{historyError}</p>
+                <button
+                  type="button"
+                  onClick={() => setReloadKey((current) => current + 1)}
+                  className="mt-2 rounded-full border border-red-200 px-3 py-1.5 text-xs font-bold text-red-600"
+                >
+                  再読み込み
+                </button>
+              </div>
             ) : soldItems.length > 0 ? (
               <ul className="space-y-2">
                 {soldItems.map((item) => (
@@ -160,7 +185,16 @@ export default function MyPage() {
             {historyLoading ? (
               <p className="text-xs text-slate-400">読み込み中...</p>
             ) : historyError ? (
-              <p className="text-xs font-bold text-red-500">{historyError}</p>
+              <div>
+                <p className="text-xs font-bold text-red-500">{historyError}</p>
+                <button
+                  type="button"
+                  onClick={() => setReloadKey((current) => current + 1)}
+                  className="mt-2 rounded-full border border-red-200 px-3 py-1.5 text-xs font-bold text-red-600"
+                >
+                  再読み込み
+                </button>
+              </div>
             ) : boughtTransactions.length > 0 ? (
               <ul className="space-y-2">
                 {boughtTransactions.map(({ transaction, itemTitle }) => (
