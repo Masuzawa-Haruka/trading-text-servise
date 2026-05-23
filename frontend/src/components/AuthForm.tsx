@@ -20,7 +20,6 @@ type AuthFormProps = {
 export function AuthForm({ initialMode }: AuthFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [nickname, setNickname] = useState("");
@@ -28,7 +27,7 @@ export function AuthForm({ initialMode }: AuthFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isSignup = mode === "signup";
+  const isSignup = initialMode === "signup";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -87,12 +86,6 @@ export function AuthForm({ initialMode }: AuthFormProps) {
     }
   }
 
-  function switchMode(nextMode: AuthMode) {
-    setMode(nextMode);
-    setError(null);
-    setMessage(null);
-  }
-
   function getNextPath(): string {
     const next = searchParams.get("next");
     if (!next || !next.startsWith("/") || next.startsWith("//")) {
@@ -100,6 +93,11 @@ export function AuthForm({ initialMode }: AuthFormProps) {
     }
 
     return next;
+  }
+
+  function getAuthPath(nextMode: AuthMode): string {
+    const path = nextMode === "signin" ? "/login" : "/signup";
+    return `${path}?next=${encodeURIComponent(getNextPath())}`;
   }
 
   return (
@@ -114,24 +112,22 @@ export function AuthForm({ initialMode }: AuthFormProps) {
         </p>
 
         <div className="mt-8 grid grid-cols-2 rounded border border-slate-200 bg-slate-50 p-1">
-          <button
-            type="button"
-            onClick={() => switchMode("signin")}
-            className={`h-10 rounded text-sm font-bold ${
-              mode === "signin" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"
+          <Link
+            href={getAuthPath("signin")}
+            className={`grid h-10 place-items-center rounded text-sm font-bold ${
+              initialMode === "signin" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"
             }`}
           >
             ログイン
-          </button>
-          <button
-            type="button"
-            onClick={() => switchMode("signup")}
-            className={`h-10 rounded text-sm font-bold ${
-              mode === "signup" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"
+          </Link>
+          <Link
+            href={getAuthPath("signup")}
+            className={`grid h-10 place-items-center rounded text-sm font-bold ${
+              initialMode === "signup" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"
             }`}
           >
             新規登録
-          </button>
+          </Link>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -197,7 +193,7 @@ export function AuthForm({ initialMode }: AuthFormProps) {
         <p className="mt-5 text-center text-xs text-slate-500">
           {isSignup ? "すでにアカウントをお持ちですか？" : "アカウントをお持ちでないですか？"}{" "}
           <Link
-            href={isSignup ? `/login?next=${encodeURIComponent(getNextPath())}` : `/signup?next=${encodeURIComponent(getNextPath())}`}
+            href={getAuthPath(isSignup ? "signin" : "signup")}
             className="font-bold text-[#0047c7]"
           >
             {isSignup ? "ログイン" : "新規登録"}

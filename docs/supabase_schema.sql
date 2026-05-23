@@ -474,12 +474,14 @@ BEGIN
   VALUES (
     new.id,
     new.email,
-    COALESCE(new.raw_user_meta_data->>'nickname', 'ゲストユーザー')
-  );
+    COALESCE(NULLIF(BTRIM(new.raw_user_meta_data->>'nickname'), ''), 'ゲストユーザー')
+  )
+  ON CONFLICT (id) DO NOTHING;
   RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
