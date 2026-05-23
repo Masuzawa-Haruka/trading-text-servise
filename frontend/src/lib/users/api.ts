@@ -94,7 +94,7 @@ function defaultMockProfile(): UserProfile {
   const now = new Date().toISOString();
   return {
     id: mockStore.currentUser.id,
-    email: "mock-user@osaka-u.ac.jp",
+    email: "mock-user@ecs.osaka-u.ac.jp",
     nickname: mockStore.currentUser.nickname,
     profile_image_url: null,
     credit_score: mockStore.currentUser.creditScore,

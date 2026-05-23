@@ -4,7 +4,9 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  getPasswordAuthErrorMessage,
   normalizeAuthEmail,
+  resendSignupConfirmation,
   signInWithPassword,
   signUpWithPassword,
   validatePasswordAuthInput,
@@ -26,6 +28,8 @@ export function AuthForm({ initialMode }: AuthFormProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [canResendConfirmation, setCanResendConfirmation] = useState(false);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   const isSignup = initialMode === "signup";
 
@@ -33,6 +37,7 @@ export function AuthForm({ initialMode }: AuthFormProps) {
     event.preventDefault();
     setMessage(null);
     setError(null);
+    setCanResendConfirmation(false);
 
     const normalizedEmail = normalizeAuthEmail(email);
     const validationError = validatePasswordAuthInput({
@@ -59,11 +64,13 @@ export function AuthForm({ initialMode }: AuthFormProps) {
         });
 
         if (signUpError) {
-          setError(signUpError.message);
+          setError(getPasswordAuthErrorMessage(signUpError.message));
+          setCanResendConfirmation(true);
           return;
         }
 
         setMessage("確認メールを送信しました。メール内のリンクから登録を完了してください。");
+        setCanResendConfirmation(true);
         return;
       }
 
@@ -73,7 +80,8 @@ export function AuthForm({ initialMode }: AuthFormProps) {
       });
 
       if (signInError) {
-        setError(signInError.message);
+        setError(getPasswordAuthErrorMessage(signInError.message));
+        setCanResendConfirmation(signInError.message.toLowerCase().includes("email not confirmed"));
         return;
       }
 
@@ -81,6 +89,46 @@ export function AuthForm({ initialMode }: AuthFormProps) {
       router.refresh();
     } catch {
       setError("認証処理に失敗しました。時間を置いて再度お試しください。");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleResendConfirmation() {
+    setMessage(null);
+    setError(null);
+
+    const normalizedEmail = normalizeAuthEmail(email);
+    if (!normalizedEmail) {
+      setError("確認メールを再送するメールアドレスを入力してください。");
+      return;
+    }
+
+    const validationError = validatePasswordAuthInput({
+      email: normalizedEmail,
+      password: password || "********",
+    });
+    if (validationError && validationError.includes("メールアドレス")) {
+      setError(validationError);
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const { error: resendError } = await resendSignupConfirmation(createClient(), {
+        email: normalizedEmail,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(getNextPath())}`,
+      });
+
+      if (resendError) {
+        setError(getPasswordAuthErrorMessage(resendError.message));
+        return;
+      }
+
+      setMessage("確認メールを再送しました。メール内のリンクから登録を完了してください。");
+      setCanResendConfirmation(true);
+    } catch {
+      setError("確認メールの再送に失敗しました。時間を置いて再度お試しください。");
     } finally {
       setIsSubmitting(false);
     }
@@ -108,7 +156,9 @@ export function AuthForm({ initialMode }: AuthFormProps) {
           {isSignup ? "阪大メールで新規登録" : "ログイン"}
         </h1>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          大阪大学のメールアドレスで認証します。
+          {isSignup
+            ? "登録後、入力した阪大メール宛に認証メールを送信します。"
+            : "大阪大学のメールアドレスで認証します。"}
         </p>
 
         <div className="mt-8 grid grid-cols-2 rounded border border-slate-200 bg-slate-50 p-1">
@@ -138,7 +188,7 @@ export function AuthForm({ initialMode }: AuthFormProps) {
               onChange={(event) => setEmail(event.target.value)}
               type="email"
               autoComplete="email"
-              placeholder="your.name@osaka-u.ac.jp"
+              placeholder="u123456a@ecs.osaka-u.ac.jp"
               className="mt-2 h-12 w-full rounded border border-slate-200 px-3 text-sm outline-none focus:border-[#0047c7]"
               required
             />
@@ -157,17 +207,32 @@ export function AuthForm({ initialMode }: AuthFormProps) {
             </label>
           ) : null}
 
-          <label className="block">
-            <span className="text-xs font-bold text-slate-700">パスワード</span>
-            <input
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              type="password"
-              autoComplete={isSignup ? "new-password" : "current-password"}
-              className="mt-2 h-12 w-full rounded border border-slate-200 px-3 text-sm outline-none focus:border-[#0047c7]"
-              required
-            />
-          </label>
+          <div>
+            <label htmlFor="auth-password" className="text-xs font-bold text-slate-700">
+              パスワード
+            </label>
+            <div className="relative mt-2">
+              <input
+                id="auth-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type={isPasswordVisible ? "text" : "password"}
+                autoComplete={isSignup ? "new-password" : "current-password"}
+                className="h-12 w-full rounded border border-slate-200 px-3 pr-16 text-sm outline-none focus:border-[#0047c7]"
+                required
+              />
+              <button
+                type="button"
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => setIsPasswordVisible((current) => !current)}
+                aria-label={isPasswordVisible ? "パスワードを隠す" : "パスワードを表示する"}
+                aria-pressed={isPasswordVisible}
+                className="absolute right-2 top-1/2 z-10 min-h-8 -translate-y-1/2 rounded px-2 py-1 text-xs font-bold text-[#0047c7]"
+              >
+                {isPasswordVisible ? "隠す" : "表示"}
+              </button>
+            </div>
+          </div>
 
           {error ? (
             <p className="rounded border border-red-100 bg-red-50 px-3 py-2 text-sm font-bold text-red-600">
@@ -178,6 +243,23 @@ export function AuthForm({ initialMode }: AuthFormProps) {
           {message ? (
             <p className="rounded border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700">
               {message}
+            </p>
+          ) : null}
+
+          {canResendConfirmation ? (
+            <button
+              type="button"
+              onClick={handleResendConfirmation}
+              disabled={isSubmitting}
+              className="w-full rounded border border-blue-100 bg-white px-3 py-2 text-sm font-bold text-[#0047c7] disabled:opacity-60"
+            >
+              確認メールを再送する
+            </button>
+          ) : null}
+
+          {isSignup ? (
+            <p className="rounded border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold leading-5 text-blue-700">
+              「登録する」を押すと、入力したメールアドレス宛に認証メールが届きます。メール内のリンクを開くと登録が完了します。
             </p>
           ) : null}
 

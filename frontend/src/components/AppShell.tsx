@@ -5,7 +5,10 @@ import { AppFooter } from "@/components/AppFooter";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/auth");
+  const isAuthPage =
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/signup") ||
+    pathname.startsWith("/auth");
 
   return (
     <>

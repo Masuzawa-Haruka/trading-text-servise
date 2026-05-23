@@ -77,7 +77,7 @@ test('authenticateToken rejects non-Osaka University email domains', async () =>
 test('authenticateToken accepts Supabase JWTs for Osaka University email domains', async () => {
   const req = {
     headers: {
-      authorization: `Bearer ${authToken({ email: 'student@osaka-u.ac.jp' })}`,
+      authorization: `Bearer ${authToken({ email: 'student@ecs.osaka-u.ac.jp' })}`,
     },
     body: {},
     params: {},
@@ -91,7 +91,7 @@ test('authenticateToken accepts Supabase JWTs for Osaka University email domains
 
   assert.equal(authenticated, true);
   assert.equal(req.user?.id, AUTH_USER_ID);
-  assert.equal(req.user?.email, 'student@osaka-u.ac.jp');
+  assert.equal(req.user?.email, 'student@ecs.osaka-u.ac.jp');
 });
 
 test('extractBearerToken normalizes string headers and rejects malformed values', () => {
@@ -310,7 +310,7 @@ test('PATCH /api/users/me trims nickname and accepts nullable profile image URL'
       capturedArgs = args;
       return {
         id: AUTH_USER_ID,
-        email: 'test@osaka-u.ac.jp',
+        email: 'test@ecs.osaka-u.ac.jp',
         nickname: '阪大 太郎',
         profile_image_url: null,
         credit_score: 100,
@@ -589,7 +589,7 @@ function authToken(options: { email?: string } = {}): string {
   return jwt.sign(
     {
       sub: AUTH_USER_ID,
-      email: options.email ?? 'test@osaka-u.ac.jp',
+      email: options.email ?? 'test@ecs.osaka-u.ac.jp',
       role: 'authenticated',
       aud: 'authenticated',
     },

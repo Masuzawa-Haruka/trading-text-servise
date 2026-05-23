@@ -3,23 +3,25 @@
 
 DO $$
 BEGIN
-  IF NOT EXISTS (
+  IF EXISTS (
     SELECT 1
     FROM pg_constraint
     WHERE conname = 'users_email_osaka_domain'
       AND conrelid = 'users'::regclass
   ) THEN
-    ALTER TABLE users
-      ADD CONSTRAINT users_email_osaka_domain
-      CHECK (lower(email) LIKE '%@osaka-u.ac.jp') NOT VALID;
+    ALTER TABLE users DROP CONSTRAINT users_email_osaka_domain;
   END IF;
+
+  ALTER TABLE users
+    ADD CONSTRAINT users_email_osaka_domain
+    CHECK (lower(email) LIKE '%@ecs.osaka-u.ac.jp') NOT VALID;
 END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  IF new.email IS NULL OR lower(new.email) NOT LIKE '%@osaka-u.ac.jp' THEN
+  IF new.email IS NULL OR lower(new.email) NOT LIKE '%@ecs.osaka-u.ac.jp' THEN
     RAISE EXCEPTION '大阪大学のメールアドレスで登録してください'
       USING ERRCODE = 'P0001';
   END IF;
@@ -54,7 +56,7 @@ BEGIN
     COALESCE(NULLIF(BTRIM(auth_users.raw_user_meta_data->>'nickname'), ''), 'ゲストユーザー')
   FROM auth.users AS auth_users
   WHERE auth_users.email IS NOT NULL
-    AND lower(auth_users.email) LIKE '%@osaka-u.ac.jp'
+    AND lower(auth_users.email) LIKE '%@ecs.osaka-u.ac.jp'
   ON CONFLICT (id) DO NOTHING;
 
   DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
