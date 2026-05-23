@@ -29,6 +29,7 @@ export function AuthForm({ initialMode }: AuthFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [canResendConfirmation, setCanResendConfirmation] = useState(false);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   const isSignup = initialMode === "signup";
 
@@ -208,14 +209,24 @@ export function AuthForm({ initialMode }: AuthFormProps) {
 
           <label className="block">
             <span className="text-xs font-bold text-slate-700">パスワード</span>
-            <input
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              type="password"
-              autoComplete={isSignup ? "new-password" : "current-password"}
-              className="mt-2 h-12 w-full rounded border border-slate-200 px-3 text-sm outline-none focus:border-[#0047c7]"
-              required
-            />
+            <span className="relative mt-2 block">
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type={isPasswordVisible ? "text" : "password"}
+                autoComplete={isSignup ? "new-password" : "current-password"}
+                className="h-12 w-full rounded border border-slate-200 px-3 pr-16 text-sm outline-none focus:border-[#0047c7]"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setIsPasswordVisible((current) => !current)}
+                aria-label={isPasswordVisible ? "パスワードを隠す" : "パスワードを表示する"}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs font-bold text-[#0047c7]"
+              >
+                {isPasswordVisible ? "隠す" : "表示"}
+              </button>
+            </span>
           </label>
 
           {error ? (
