@@ -141,7 +141,7 @@ async function seedScheduledTransaction(): Promise<Scenario> {
         gen_random_uuid(),
         'authenticated',
         'authenticated',
-        ${`execute-cancel-seller-${scenario.sellerId}@osaka-u.ac.jp`},
+        ${`execute-cancel-seller-${scenario.sellerId}@ecs.osaka-u.ac.jp`},
         '$2a$10$executecanceltestexecutecanceltestexecutecanceltest12',
         NOW(),
         '{}'::jsonb,
@@ -154,7 +154,7 @@ async function seedScheduledTransaction(): Promise<Scenario> {
         gen_random_uuid(),
         'authenticated',
         'authenticated',
-        ${`execute-cancel-buyer-${scenario.buyerId}@osaka-u.ac.jp`},
+        ${`execute-cancel-buyer-${scenario.buyerId}@ecs.osaka-u.ac.jp`},
         '$2a$10$executecanceltestexecutecanceltestexecutecanceltest12',
         NOW(),
         '{}'::jsonb,
@@ -170,7 +170,7 @@ async function seedScheduledTransaction(): Promise<Scenario> {
     VALUES
       (
         ${scenario.sellerId}::uuid,
-        ${`execute-cancel-seller-${scenario.sellerId}@osaka-u.ac.jp`},
+        ${`execute-cancel-seller-${scenario.sellerId}@ecs.osaka-u.ac.jp`},
         'キャンセル統合テスト 出品者',
         100,
         'active',
@@ -179,7 +179,7 @@ async function seedScheduledTransaction(): Promise<Scenario> {
       ),
       (
         ${scenario.buyerId}::uuid,
-        ${`execute-cancel-buyer-${scenario.buyerId}@osaka-u.ac.jp`},
+        ${`execute-cancel-buyer-${scenario.buyerId}@ecs.osaka-u.ac.jp`},
         'キャンセル統合テスト 購入者',
         100,
         'active',
@@ -294,7 +294,7 @@ function authToken(userId: string): string {
   return jwt.sign(
     {
       sub: userId,
-      email: `execute-cancel-${userId}@osaka-u.ac.jp`,
+      email: `execute-cancel-${userId}@ecs.osaka-u.ac.jp`,
       role: 'authenticated',
       aud: 'authenticated',
     },

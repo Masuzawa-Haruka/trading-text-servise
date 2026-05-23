@@ -39,7 +39,7 @@ NEXT_PUBLIC_AUTH_MOCK_ENABLED=false
 NEXT_PUBLIC_AUTH_MOCK_ENABLED=true
 ```
 
-Protected frontend routes such as `/mypage`, `/sell`, `/transactions`, and `/inbox` are guarded by Next.js Proxy. Unauthenticated users are redirected to `/login?next=...`; `/signup` uses the same Supabase password auth flow and blocks non-`@osaka-u.ac.jp` email addresses before calling Supabase.
+Protected frontend routes such as `/mypage`, `/sell`, `/transactions`, and `/inbox` are guarded by Next.js Proxy. Unauthenticated users are redirected to `/login?next=...`; `/signup` uses the same Supabase password auth flow and blocks non-`@ecs.osaka-u.ac.jp` email addresses before calling Supabase.
 
 To verify the real signup flow:
 
@@ -57,7 +57,7 @@ cd ../frontend
 npm run dev
 ```
 
-Then open `http://localhost:3000/signup`, register with an `@osaka-u.ac.jp`
+Then open `http://localhost:3000/signup`, register with an `@ecs.osaka-u.ac.jp`
 address, open the confirmation email, and confirm that `/auth/callback`
 redirects into the app. After login, `/mypage` should render the synced
 `public.users` profile.

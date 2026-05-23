@@ -187,7 +187,7 @@ export function AuthForm({ initialMode }: AuthFormProps) {
               onChange={(event) => setEmail(event.target.value)}
               type="email"
               autoComplete="email"
-              placeholder="u123456a@osaka-u.ac.jp"
+              placeholder="u123456a@ecs.osaka-u.ac.jp"
               className="mt-2 h-12 w-full rounded border border-slate-200 px-3 text-sm outline-none focus:border-[#0047c7]"
               required
             />

@@ -2,10 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma';
 
-const ALLOWED_EMAIL_DOMAIN = '@osaka-u.ac.jp';
+const ALLOWED_EMAIL_DOMAIN = '@ecs.osaka-u.ac.jp';
 const MOCK_ACCESS_TOKEN = 'mock-access-token';
 const MOCK_USER_ID = '11111111-1111-4111-8111-111111111111';
-const MOCK_USER_EMAIL = 'mock-user@osaka-u.ac.jp';
+const MOCK_USER_EMAIL = 'mock-user@ecs.osaka-u.ac.jp';
 
 export interface AuthRequest extends Request {
   user?: {

@@ -22,7 +22,7 @@ export function normalizeAuthEmail(email: string): string {
 
 export function validatePasswordAuthInput(input: PasswordAuthInput): string | null {
   if (!isOsakaUniversityEmail(input.email)) {
-    return "大阪大学のメールアドレス（@osaka-u.ac.jp）を入力してください";
+    return "大阪大学のメールアドレス（@ecs.osaka-u.ac.jp）を入力してください";
   }
 
   if (input.password.length < 8) {

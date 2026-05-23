@@ -22,7 +22,7 @@ CREATE TYPE "NotificationType" AS ENUM ('action_required', 'info');
 -- 1. Users
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR UNIQUE NOT NULL CONSTRAINT users_email_osaka_domain CHECK (lower(email) LIKE '%@osaka-u.ac.jp'),
+    email VARCHAR UNIQUE NOT NULL CONSTRAINT users_email_osaka_domain CHECK (lower(email) LIKE '%@ecs.osaka-u.ac.jp'),
     nickname VARCHAR NOT NULL,
     profile_image_url VARCHAR,
     credit_score INT DEFAULT 100,
@@ -465,7 +465,7 @@ CREATE TRIGGER update_location_spots_modtime BEFORE UPDATE ON location_spots FOR
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  IF new.email IS NULL OR lower(new.email) NOT LIKE '%@osaka-u.ac.jp' THEN
+  IF new.email IS NULL OR lower(new.email) NOT LIKE '%@ecs.osaka-u.ac.jp' THEN
     RAISE EXCEPTION '大阪大学のメールアドレスで登録してください'
       USING ERRCODE = 'P0001';
   END IF;

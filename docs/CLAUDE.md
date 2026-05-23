@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Frontend**: Next.js 15 (App Router, TypeScript, Tailwind CSS)
 - **Backend / DB**: Supabase (PostgreSQL, Auth, Realtime)
-- **Auth**: Supabase Auth（阪大メール @osaka-u.ac.jp ドメイン制限）
+- **Auth**: Supabase Auth（阪大メール @ecs.osaka-u.ac.jp ドメイン制限）
 - **Hosting**: Vercel（予定）
 
 ## Commands
@@ -61,7 +61,7 @@ docs/
 
 ## Auth Notes
 
-- Supabase Auth のメールドメイン制限で `@osaka-u.ac.jp` のみを許可する（ダッシュボードで設定）。
+- Supabase Auth のメールドメイン制限で `@ecs.osaka-u.ac.jp` のみを許可する（ダッシュボードで設定）。
 - `src/middleware.ts` がすべてのリクエストでセッションをリフレッシュし、未認証ユーザーを `/login` にリダイレクトする。
 - `/login` と `/auth/**` は認証不要のパブリックルート。
 
