@@ -41,6 +41,27 @@ NEXT_PUBLIC_AUTH_MOCK_ENABLED=true
 
 Protected frontend routes such as `/mypage`, `/sell`, `/transactions`, and `/inbox` are guarded by Next.js Proxy. Unauthenticated users are redirected to `/login?next=...`; `/signup` uses the same Supabase password auth flow and blocks non-`@osaka-u.ac.jp` email addresses before calling Supabase.
 
+To verify the real signup flow:
+
+```bash
+# 1. Apply the Supabase Auth -> public.users sync trigger.
+# Use the Supabase SQL editor or a direct DB connection.
+docs/migrations/20260521_enforce_osaka_auth.sql
+
+# 2. Start the backend with real JWT verification.
+cd backend
+npm run dev
+
+# 3. Start the frontend with NEXT_PUBLIC_AUTH_MOCK_ENABLED=false.
+cd ../frontend
+npm run dev
+```
+
+Then open `http://localhost:3000/signup`, register with an `@osaka-u.ac.jp`
+address, open the confirmation email, and confirm that `/auth/callback`
+redirects into the app. After login, `/mypage` should render the synced
+`public.users` profile.
+
 For local user-flow verification without real Supabase Auth/Storage, use Mock Auth with a local database:
 
 ```bash
