@@ -1,14 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getMyProfile, updateMyProfile } from "@/lib/users/api";
+import {
+  deleteProfileImage,
+  uploadProfileImage,
+  validateProfileImageFile,
+} from "@/lib/users/profileImage";
 
 export default function ProfileEditPage() {
   const router = useRouter();
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
-  const [profileImageUrl, setProfileImageUrl] = useState("");
+  const [savedProfileImageUrl, setSavedProfileImageUrl] = useState("");
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState("");
+  const [shouldRemoveImage, setShouldRemoveImage] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +32,7 @@ export default function ProfileEditPage() {
         if (!ignore) {
           setNickname(profile.nickname);
           setEmail(profile.email);
-          setProfileImageUrl(profile.profile_image_url ?? "");
+          setSavedProfileImageUrl(profile.profile_image_url ?? "");
         }
       } catch (caughtError) {
         if (!ignore) {
@@ -46,9 +56,59 @@ export default function ProfileEditPage() {
     };
   }, [router]);
 
+  useEffect(() => {
+    return () => {
+      if (previewImageUrl) {
+        URL.revokeObjectURL(previewImageUrl);
+      }
+    };
+  }, [previewImageUrl]);
+
+  const displayedImageUrl = previewImageUrl || (shouldRemoveImage ? "" : savedProfileImageUrl);
+
+  const clearFileInputs = () => {
+    if (galleryInputRef.current) {
+      galleryInputRef.current.value = "";
+    }
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = "";
+    }
+  };
+
+  const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      validateProfileImageFile(file);
+      const nextPreviewUrl = URL.createObjectURL(file);
+      if (previewImageUrl) {
+        URL.revokeObjectURL(previewImageUrl);
+      }
+      setSelectedImageFile(file);
+      setPreviewImageUrl(nextPreviewUrl);
+      setShouldRemoveImage(false);
+      setError(null);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "画像を選択できませんでした");
+      clearFileInputs();
+    }
+  };
+
+  const handleRemoveImage = () => {
+    if (previewImageUrl) {
+      URL.revokeObjectURL(previewImageUrl);
+    }
+    setSelectedImageFile(null);
+    setPreviewImageUrl("");
+    setShouldRemoveImage(true);
+    clearFileInputs();
+  };
+
   const handleSave = async () => {
     const normalizedNickname = nickname.trim();
-    const normalizedProfileImageUrl = profileImageUrl.trim();
 
     if (!normalizedNickname) {
       setError("ニックネームを入力してください");
@@ -60,17 +120,34 @@ export default function ProfileEditPage() {
       return;
     }
 
+    let uploadedProfileImageUrl: string | null = null;
+
     try {
       setSaving(true);
       setError(null);
+      const nextProfileImageUrl = selectedImageFile
+        ? await uploadProfileImage(selectedImageFile)
+        : shouldRemoveImage
+          ? null
+          : savedProfileImageUrl || null;
+      uploadedProfileImageUrl = selectedImageFile ? nextProfileImageUrl : null;
+
       await updateMyProfile({
         nickname: normalizedNickname,
-        profile_image_url: normalizedProfileImageUrl || null,
+        profile_image_url: nextProfileImageUrl,
       });
+
+      if (savedProfileImageUrl && savedProfileImageUrl !== nextProfileImageUrl) {
+        await deleteProfileImage(savedProfileImageUrl);
+      }
+
       router.push("/mypage");
       router.refresh();
-    } catch {
-      setError("プロフィールを保存できませんでした");
+    } catch (caughtError) {
+      if (uploadedProfileImageUrl) {
+        await deleteProfileImage(uploadedProfileImageUrl);
+      }
+      setError(caughtError instanceof Error ? caughtError.message : "プロフィールを保存できませんでした");
     } finally {
       setSaving(false);
     }
@@ -95,9 +172,9 @@ export default function ProfileEditPage() {
       <section className="flex flex-col items-center py-6">
         <div className="relative mb-2">
           <div className="grid size-24 place-items-center overflow-hidden rounded-full bg-slate-200 text-4xl">
-            {profileImageUrl ? (
+            {displayedImageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={profileImageUrl} alt="" className="size-full object-cover" />
+              <img src={displayedImageUrl} alt="" className="size-full object-cover" />
             ) : (
               <span aria-hidden="true">👤</span>
             )}
@@ -106,6 +183,52 @@ export default function ProfileEditPage() {
             <span className="text-xs">📷</span>
           </div>
         </div>
+        <div className="mt-3 flex flex-wrap justify-center gap-2 px-4">
+          <button
+            type="button"
+            onClick={() => galleryInputRef.current?.click()}
+            disabled={loading || saving}
+            className="rounded-full bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:bg-slate-300"
+          >
+            画像を選択
+          </button>
+          <button
+            type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={loading || saving}
+            className="rounded-full border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 disabled:text-slate-300"
+          >
+            カメラで撮影
+          </button>
+          {displayedImageUrl ? (
+            <button
+              type="button"
+              onClick={handleRemoveImage}
+              disabled={loading || saving}
+              className="rounded-full border border-red-200 px-4 py-2 text-xs font-bold text-red-600 disabled:text-slate-300"
+            >
+              削除
+            </button>
+          ) : null}
+        </div>
+        <p className="mt-2 px-4 text-center text-[11px] font-medium text-slate-400">
+          JPEG、PNG、WebP、GIF、HEIC / 5MBまで
+        </p>
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
+          className="hidden"
+          onChange={handleImageChange}
+        />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
+          capture="environment"
+          className="hidden"
+          onChange={handleImageChange}
+        />
       </section>
 
       {error ? (
@@ -139,19 +262,9 @@ export default function ProfileEditPage() {
           />
         </div>
 
-        <div>
-          <label className="mb-1 block text-xs font-bold text-slate-700">
-            プロフィール画像URL <span className="text-[10px] text-slate-400">(任意)</span>
-          </label>
-          <input
-            type="url"
-            value={profileImageUrl}
-            onChange={(event) => setProfileImageUrl(event.target.value)}
-            disabled={loading}
-            placeholder="https://..."
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none disabled:bg-slate-50"
-          />
-        </div>
+        <p className="rounded-md bg-slate-50 px-3 py-2 text-xs font-medium leading-5 text-slate-500">
+          プロフィール画像は保存時にアップロードされます。差し替えや削除はマイページにすぐ反映されます。
+        </p>
       </section>
     </main>
   );

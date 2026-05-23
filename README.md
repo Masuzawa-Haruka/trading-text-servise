@@ -29,6 +29,12 @@ Item image uploads use the public Supabase Storage bucket `item-images`. Apply
 `docs/migrations/20260523_create_item_images_storage_bucket.sql` to Supabase
 staging/production before testing real `/sell` uploads.
 
+Profile image uploads use the public Supabase Storage bucket `profile-images`.
+Apply `docs/migrations/20260526_create_profile_images_storage_bucket.sql` to
+Supabase staging/production before testing real `/mypage/edit` image uploads.
+The bucket stores images under each user's auth UID folder and allows users to
+replace or delete only their own profile images.
+
 Frontend authentication can be switched locally with `.env.local`:
 
 ```bash
