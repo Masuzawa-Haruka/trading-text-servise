@@ -31,6 +31,7 @@ import {
 type Candidate = {
   date: string;
   time: string;
+  area: string;
   locationId: string;
 };
 
@@ -91,9 +92,8 @@ export default function TransactionPage() {
   const [offerPrice, setOfferPrice] = useState("");
   const [cancelReason, setCancelReason] = useState("");
   const [evaluationType, setEvaluationType] = useState<EvaluationType>("good");
-  const [selectedArea, setSelectedArea] = useState("");
   const [candidates, setCandidates] = useState<Candidate[]>([
-    { date: "", time: "", locationId: "" },
+    { date: "", time: "", area: "", locationId: "" },
   ]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -114,9 +114,7 @@ export default function TransactionPage() {
       const nextTransaction = await getTransaction(transactionId);
       const [nextItem, nextProposals, nextPriceOffers] = await Promise.all([
         getItem(nextTransaction.item_id),
-        nextTransaction.status === "proposing"
-          ? getScheduleProposals(nextTransaction.id).catch(() => [])
-          : Promise.resolve([]),
+        getScheduleProposals(nextTransaction.id).catch(() => []),
         getPriceOffers(nextTransaction.id).catch(() => []),
       ]);
 
@@ -155,8 +153,17 @@ export default function TransactionPage() {
     () => Array.from(new Set(locations.map((location) => location.area))),
     [locations],
   );
+  const locationsByArea = useMemo(
+    () =>
+      areas.map((area) => ({
+        area,
+        locations: locations.filter((location) => location.area === area),
+      })),
+    [areas, locations],
+  );
 
   const pendingProposals = proposals.filter((proposal) => proposal.status === "pending");
+  const scheduleHistory = proposals.filter((proposal) => proposal.status !== "pending");
   const pendingPriceOffer = priceOffers.find((offer) => offer.status === "pending") ?? null;
   const pendingProposal = pendingProposals[0] ?? null;
   const pendingPriceOfferIsMine = Boolean(
@@ -356,12 +363,18 @@ export default function TransactionPage() {
 
   function addCandidate() {
     if (candidates.length >= 5) return;
-    setCandidates([...candidates, { date: "", time: "", locationId: "" }]);
+    setCandidates([...candidates, { date: "", time: "", area: "", locationId: "" }]);
   }
 
   function updateCandidate(index: number, field: keyof Candidate, value: string) {
     const nextCandidates = [...candidates];
     nextCandidates[index] = { ...nextCandidates[index], [field]: value };
+    setCandidates(nextCandidates);
+  }
+
+  function updateCandidateArea(index: number, area: string) {
+    const nextCandidates = [...candidates];
+    nextCandidates[index] = { ...nextCandidates[index], area, locationId: "" };
     setCandidates(nextCandidates);
   }
 
@@ -393,7 +406,7 @@ export default function TransactionPage() {
         candidates: validCandidates,
       });
       setShowScheduleModal(false);
-      setCandidates([{ date: "", time: "", locationId: "" }]);
+      setCandidates([{ date: "", time: "", area: "", locationId: "" }]);
       await loadData();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "日程提案の送信に失敗しました");
@@ -402,13 +415,17 @@ export default function TransactionPage() {
     }
   }
 
-  async function handleProposalResponse(proposalId: string, candidateId: string) {
+  async function handleProposalResponse(
+    proposalId: string,
+    status: "accepted" | "rejected",
+    candidateId?: string,
+  ) {
     if (isSubmitting) return;
 
     setIsSubmitting(true);
     setError(null);
     try {
-      await respondScheduleProposal(proposalId, { status: "accepted", candidate_id: candidateId });
+      await respondScheduleProposal(proposalId, { status, ...(candidateId ? { candidate_id: candidateId } : {}) });
       await loadData();
     } catch (responseError) {
       setError(responseError instanceof Error ? responseError.message : "日程提案への回答に失敗しました");
@@ -460,11 +477,79 @@ export default function TransactionPage() {
         )}
 
         {transaction.meeting_datetime && transaction.meeting_place && (
-          <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
-            <div className="font-bold">受け渡し予定</div>
-            <div>{new Date(transaction.meeting_datetime).toLocaleString("ja-JP")}</div>
-            <div>{transaction.meeting_place}</div>
-          </div>
+          <section className="rounded-lg border border-green-100 bg-green-50 p-3 text-sm text-green-950 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] font-black opacity-70">確定した受け渡し予定</div>
+                <div className="mt-1 text-base font-black">
+                  {formatDateTime(transaction.meeting_datetime)}
+                </div>
+                <div className="mt-1 text-xs font-bold leading-relaxed">{transaction.meeting_place}</div>
+              </div>
+              <span className="shrink-0 rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-black">
+                確定
+              </span>
+            </div>
+          </section>
+        )}
+
+        {(pendingProposals.length > 0 || scheduleHistory.length > 0) && (
+          <section className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-bold text-slate-900">日程提案</div>
+                <div className="mt-1 text-xs leading-relaxed text-slate-500">
+                  {pendingProposals.length > 0
+                    ? "未回答の候補があります。都合のよい候補を選ぶと日程が確定します。"
+                    : "これまでの日程提案と回答履歴です。"}
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
+                {proposals.length}件
+              </span>
+            </div>
+
+            <div className="mt-3 space-y-3">
+              {pendingProposals.map((proposal) => (
+                <ScheduleProposalCard
+                  key={proposal.id}
+                  proposal={proposal}
+                  currentUserId={currentUserId}
+                  partnerLabel={partnerLabel}
+                  isSubmitting={isSubmitting}
+                  onAccept={(candidateId) => handleProposalResponse(proposal.id, "accepted", candidateId)}
+                  onReject={() => handleProposalResponse(proposal.id, "rejected")}
+                />
+              ))}
+              {scheduleHistory.map((proposal) => (
+                <ScheduleProposalCard
+                  key={proposal.id}
+                  proposal={proposal}
+                  currentUserId={currentUserId}
+                  partnerLabel={partnerLabel}
+                  isSubmitting={isSubmitting}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {transaction.status === "proposing" && proposals.length === 0 && (
+          <section className="rounded-lg border border-dashed border-slate-200 bg-white p-3 text-sm text-slate-600">
+            <div className="font-bold text-slate-900">日程提案</div>
+            <div className="mt-1 text-xs leading-relaxed">
+              まだ日程候補はありません。価格が問題なければ、受け渡し候補を最大5つまで提案できます。
+            </div>
+            {!pendingPriceOffer && (
+              <button
+                onClick={() => handleAction("schedule")}
+                disabled={isSubmitting}
+                className="mt-3 rounded-full bg-[#0047c7] px-4 py-2 text-xs font-bold text-white shadow-sm disabled:opacity-50"
+              >
+                日程を提案する
+              </button>
+            )}
+          </section>
         )}
 
         {(transaction.status === "proposing" || priceOffers.length > 0) && (
@@ -579,36 +664,6 @@ export default function TransactionPage() {
             )}
           </div>
         )}
-
-        {pendingProposals.map((proposal) => {
-          const isMine = proposal.sender_id === currentUserId || (MOCK_AUTH_ENABLED && currentUserId === MOCK_USER_ID);
-          return (
-            <div
-              key={proposal.id}
-              className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900 shadow-sm"
-            >
-              <div className="mb-2 font-bold">日程提案</div>
-              <div className="space-y-2">
-                {proposal.candidates.map((candidate) => (
-                  <div key={candidate.id} className="rounded bg-white p-2">
-                    <div>{new Date(candidate.proposed_datetime).toLocaleString("ja-JP")}</div>
-                    <div className="text-xs text-slate-600">{candidate.proposed_place}</div>
-                    {!isMine && (
-                      <button
-                        onClick={() => handleProposalResponse(proposal.id, candidate.id)}
-                        disabled={isSubmitting}
-                        className="mt-2 rounded-full bg-[#0047c7] px-3 py-1 text-xs font-bold text-white disabled:opacity-50"
-                      >
-                        この候補で確定
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {isMine && <div className="mt-2 text-xs text-slate-500">相手の回答待ちです。</div>}
-            </div>
-          );
-        })}
 
         {messages.map((message) => {
           const isMe = message.sender_id === currentUserId;
@@ -792,6 +847,7 @@ export default function TransactionPage() {
 
               {candidates.map((candidate, index) => {
                 const selectedLocation = locations.find((loc) => loc.id === candidate.locationId);
+                const areaLocations = locationsByArea.find((group) => group.area === candidate.area)?.locations ?? [];
                 return (
                   <div key={index} className="relative rounded-lg border border-slate-200 bg-slate-50 p-3">
                     {candidates.length > 1 && (
@@ -832,13 +888,13 @@ export default function TransactionPage() {
                     </div>
 
                     <div className="mb-3">
-                      <label className="mb-1 block text-xs font-bold text-slate-500">場所 (エリア)</label>
+                      <label className="mb-1 block text-xs font-bold text-slate-500">キャンパス</label>
                       <select
-                        value={selectedArea}
-                        onChange={(event) => setSelectedArea(event.target.value)}
+                        value={candidate.area}
+                        onChange={(event) => updateCandidateArea(index, event.target.value)}
                         className="mb-2 w-full rounded border border-slate-300 bg-white p-1.5 text-sm"
                       >
-                        <option value="">エリアを選択</option>
+                        <option value="">キャンパスを選択</option>
                         {areas.map((area) => (
                           <option key={area} value={area}>
                             {area}
@@ -850,17 +906,15 @@ export default function TransactionPage() {
                       <select
                         value={candidate.locationId}
                         onChange={(event) => updateCandidate(index, "locationId", event.target.value)}
-                        disabled={!selectedArea}
+                        disabled={!candidate.area}
                         className="w-full rounded border border-slate-300 bg-white p-1.5 text-sm disabled:bg-slate-100 disabled:text-slate-400"
                       >
                         <option value="">スポットを選択</option>
-                        {locations
-                          .filter((location) => location.area === selectedArea)
-                          .map((location) => (
-                            <option key={location.id} value={location.id}>
-                              {location.name}
-                            </option>
-                          ))}
+                        {areaLocations.map((location) => (
+                          <option key={location.id} value={location.id}>
+                            {location.name}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
@@ -1065,6 +1119,123 @@ function ActionButton({
   );
 }
 
+function ScheduleProposalCard({
+  proposal,
+  currentUserId,
+  partnerLabel,
+  isSubmitting,
+  onAccept,
+  onReject,
+}: {
+  proposal: ScheduleProposal;
+  currentUserId: string | null;
+  partnerLabel: string;
+  isSubmitting: boolean;
+  onAccept?: (candidateId: string) => void;
+  onReject?: () => void;
+}) {
+  const isMine =
+    proposal.sender_id === currentUserId || (MOCK_AUTH_ENABLED && currentUserId === MOCK_USER_ID);
+  const canRespond = !isMine && proposal.status === "pending" && Boolean(onAccept && onReject);
+  const sortedCandidates = [...proposal.candidates].sort(
+    (a, b) => new Date(a.proposed_datetime).getTime() - new Date(b.proposed_datetime).getTime(),
+  );
+
+  return (
+    <article className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-black text-slate-900">
+            {isMine ? "あなたの提案" : `${partnerLabel}からの提案`}
+          </div>
+          <div className="mt-1 text-[11px] leading-relaxed text-slate-500">
+            {formatDateTime(proposal.created_at)} に送信
+          </div>
+        </div>
+        <ScheduleStatusBadge status={proposal.status} />
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {sortedCandidates.map((candidate, index) => {
+          const isAccepted = candidate.status === "accepted";
+          const isPending = candidate.status === "pending";
+          return (
+            <div
+              key={candidate.id}
+              className={`rounded-md border bg-white p-3 ${
+                isAccepted ? "border-green-200" : "border-slate-100"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold text-slate-500">候補 {index + 1}</div>
+                  <div className="mt-1 text-sm font-black text-slate-900">
+                    {formatDateTime(candidate.proposed_datetime)}
+                  </div>
+                  <div className="mt-1 text-xs leading-relaxed text-slate-600">
+                    {candidate.proposed_place}
+                  </div>
+                </div>
+                <ScheduleStatusBadge status={candidate.status} compact />
+              </div>
+
+              {canRespond && isPending && onAccept && (
+                <button
+                  onClick={() => onAccept(candidate.id)}
+                  disabled={isSubmitting}
+                  className="mt-3 w-full rounded-full bg-[#0047c7] py-2 text-xs font-black text-white shadow-sm disabled:opacity-50"
+                >
+                  この候補で確定
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {isMine && proposal.status === "pending" && (
+        <div className="mt-3 rounded-md bg-white p-2 text-xs font-bold text-slate-500">
+          相手の回答待ちです。新しく提案すると、この提案は自動で見送りになります。
+        </div>
+      )}
+
+      {canRespond && onReject && (
+        <button
+          onClick={onReject}
+          disabled={isSubmitting}
+          className="mt-3 w-full rounded-full bg-white py-2 text-xs font-black text-slate-700 shadow-sm disabled:opacity-50"
+        >
+          この提案を見送る
+        </button>
+      )}
+    </article>
+  );
+}
+
+function ScheduleStatusBadge({
+  status,
+  compact = false,
+}: {
+  status: ScheduleProposal["status"];
+  compact?: boolean;
+}) {
+  const badge = {
+    pending: { label: "回答待ち", className: "bg-blue-50 text-blue-700" },
+    accepted: { label: "確定", className: "bg-green-50 text-green-700" },
+    rejected: { label: "見送り", className: "bg-slate-100 text-slate-600" },
+  }[status];
+
+  return (
+    <span
+      className={`shrink-0 rounded-full font-black ${badge.className} ${
+        compact ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-[11px]"
+      }`}
+    >
+      {badge.label}
+    </span>
+  );
+}
+
 function NextActionCard({
   action,
   onAction,
@@ -1159,6 +1330,16 @@ function PriceOfferBadge({ status }: { status: PriceOffer["status"] }) {
 
 function formatPrice(price: number): string {
   return price === 0 ? "0円" : `${price.toLocaleString("ja-JP")}円`;
+}
+
+function formatDateTime(value: string): string {
+  return new Date(value).toLocaleString("ja-JP", {
+    month: "numeric",
+    day: "numeric",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function buildFooterAction(
