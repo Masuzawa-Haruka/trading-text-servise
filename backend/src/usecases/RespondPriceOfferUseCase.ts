@@ -10,6 +10,7 @@
  */
 import { IPriceOfferRepository } from '../domain/repositories/IPriceOfferRepository';
 import { ITransactionRepository } from '../domain/repositories/ITransactionRepository';
+import { INotificationRepository } from '../domain/repositories/INotificationRepository';
 import { PriceOfferEntity, RespondPriceOfferInput } from '../domain/priceOffer';
 import { NotFoundError, ForbiddenError, ValidationError } from '../domain/errors';
 
@@ -17,6 +18,7 @@ export class RespondPriceOfferUseCase {
   constructor(
     private readonly priceOfferRepository: IPriceOfferRepository,
     private readonly transactionRepository: ITransactionRepository,
+    private readonly notificationRepository?: INotificationRepository,
   ) {}
 
   /**
@@ -65,16 +67,32 @@ export class RespondPriceOfferUseCase {
     try {
       // 承認（accepted）の場合は、取引のfinal_priceも同時に更新する
       if (input.status === 'accepted') {
-        return await this.priceOfferRepository.respondAtomically(
+        const acceptedOffer = await this.priceOfferRepository.respondAtomically(
           offerId,
           'accepted',
           transaction.id,
           offer.price,
         );
+        await this.createNotificationSafely({
+          user_id: offer.sender_id,
+          actor_id: requesterId,
+          title: '価格提案が承認されました',
+          type: 'info',
+          transaction_id: transaction.id,
+        });
+        return acceptedOffer;
       }
 
       // 辞退（rejected）の場合は、オファーのステータスのみ更新する
-      return await this.priceOfferRepository.updateStatus(offerId, 'rejected');
+      const rejectedOffer = await this.priceOfferRepository.updateStatus(offerId, 'rejected');
+      await this.createNotificationSafely({
+        user_id: offer.sender_id,
+        actor_id: requesterId,
+        title: '価格提案が見送られました',
+        type: 'action_required',
+        transaction_id: transaction.id,
+      });
+      return rejectedOffer;
     } catch (error: any) {
       if (error.message === 'ALREADY_RESPONDED') {
         throw new ValidationError('このオファーはすでに回答済みか存在しません');
@@ -83,6 +101,22 @@ export class RespondPriceOfferUseCase {
         throw new NotFoundError('指定したオファーが見つかりません');
       }
       throw error;
+    }
+  }
+
+  private async createNotificationSafely(input: {
+    user_id: string;
+    actor_id: string;
+    title: string;
+    type: 'info' | 'action_required';
+    transaction_id: string;
+  }): Promise<void> {
+    if (!this.notificationRepository) return;
+
+    try {
+      await this.notificationRepository.create(input);
+    } catch (error) {
+      console.error('[RespondPriceOfferUseCase.createNotification]', error);
     }
   }
 }

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { PriceOfferController } from '../../interfaces/controllers/PriceOfferController';
 import { PriceOfferRepository } from '../repositories/PriceOfferRepository';
 import { TransactionRepository } from '../repositories/TransactionRepository';
+import { NotificationRepository } from '../repositories/NotificationRepository';
 import { SendPriceOfferUseCase } from '../../usecases/SendPriceOfferUseCase';
 import { RespondPriceOfferUseCase } from '../../usecases/RespondPriceOfferUseCase';
 import { GetPriceOffersUseCase } from '../../usecases/GetPriceOffersUseCase';
@@ -12,14 +13,17 @@ const router = Router();
 // 依存関係の組み立て
 const priceOfferRepository = new PriceOfferRepository();
 const transactionRepository = new TransactionRepository();
+const notificationRepository = new NotificationRepository();
 
 const sendPriceOfferUseCase = new SendPriceOfferUseCase(
   priceOfferRepository,
   transactionRepository,
+  notificationRepository,
 );
 const respondPriceOfferUseCase = new RespondPriceOfferUseCase(
   priceOfferRepository,
   transactionRepository,
+  notificationRepository,
 );
 
 const getPriceOffersUseCase = new GetPriceOffersUseCase(

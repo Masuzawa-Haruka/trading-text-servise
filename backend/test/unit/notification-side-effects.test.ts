@@ -1,7 +1,9 @@
 /// <reference types="node" />
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { RespondPriceOfferUseCase } from '../../src/usecases/RespondPriceOfferUseCase';
 import { SendMessageUseCase } from '../../src/usecases/SendMessageUseCase';
+import { SendPriceOfferUseCase } from '../../src/usecases/SendPriceOfferUseCase';
 import { SendScheduleProposalUseCase } from '../../src/usecases/SendScheduleProposalUseCase';
 import { SubmitEvaluationUseCase } from '../../src/usecases/SubmitEvaluationUseCase';
 import { CreateNotificationInput } from '../../src/domain/notification';
@@ -13,6 +15,8 @@ const ids = {
   seller: '33333333-3333-4333-8333-333333333333',
   buyer: '44444444-4444-4444-8444-444444444444',
 };
+
+const offerId = '77777777-7777-4777-8777-777777777777';
 
 test('SendMessageUseCase creates a notification for the counterparty', async () => {
   const notifications: unknown[] = [];
@@ -76,6 +80,95 @@ test('SendScheduleProposalUseCase creates an action-required notification for th
       actor_id: ids.seller,
       title: '日程提案が届いています',
       type: 'action_required',
+      transaction_id: ids.transaction,
+    },
+  ]);
+});
+
+test('SendPriceOfferUseCase creates an action-required notification for the counterparty', async () => {
+  const notifications: unknown[] = [];
+  const useCase = new SendPriceOfferUseCase(
+    {
+      create: async () => assert.fail('not used'),
+      createAtomically: async (input) => ({
+        id: offerId,
+        ...input,
+        status: 'pending',
+        offer_count: 1,
+        created_at: new Date('2026-05-24T00:00:00.000Z'),
+        updated_at: new Date('2026-05-24T00:00:00.000Z'),
+      }),
+      findById: async () => assert.fail('not used'),
+      findByTransactionId: async () => assert.fail('not used'),
+      countByTransactionId: async () => assert.fail('not used'),
+      findPendingByTransactionId: async () => assert.fail('not used'),
+      updateStatus: async () => assert.fail('not used'),
+      respondAtomically: async () => assert.fail('not used'),
+    },
+    createTransactionRepository(createTransaction({ status: 'proposing' })),
+    createNotificationRepository(notifications),
+  );
+
+  await useCase.execute({
+    transaction_id: ids.transaction,
+    sender_id: ids.buyer,
+    price: 300,
+  });
+
+  assert.deepEqual(notifications, [
+    {
+      user_id: ids.seller,
+      actor_id: ids.buyer,
+      title: '価格提案が届いています',
+      type: 'action_required',
+      transaction_id: ids.transaction,
+    },
+  ]);
+});
+
+test('RespondPriceOfferUseCase creates a notification for the offer sender when accepted', async () => {
+  const notifications: unknown[] = [];
+  const useCase = new RespondPriceOfferUseCase(
+    {
+      create: async () => assert.fail('not used'),
+      createAtomically: async () => assert.fail('not used'),
+      findById: async () => ({
+        id: offerId,
+        transaction_id: ids.transaction,
+        sender_id: ids.buyer,
+        price: 300,
+        status: 'pending',
+        offer_count: 1,
+        created_at: new Date('2026-05-24T00:00:00.000Z'),
+        updated_at: new Date('2026-05-24T00:00:00.000Z'),
+      }),
+      findByTransactionId: async () => assert.fail('not used'),
+      countByTransactionId: async () => assert.fail('not used'),
+      findPendingByTransactionId: async () => assert.fail('not used'),
+      updateStatus: async () => assert.fail('not used'),
+      respondAtomically: async () => ({
+        id: offerId,
+        transaction_id: ids.transaction,
+        sender_id: ids.buyer,
+        price: 300,
+        status: 'accepted',
+        offer_count: 1,
+        created_at: new Date('2026-05-24T00:00:00.000Z'),
+        updated_at: new Date('2026-05-24T00:00:00.000Z'),
+      }),
+    },
+    createTransactionRepository(createTransaction({ status: 'proposing' })),
+    createNotificationRepository(notifications),
+  );
+
+  await useCase.execute(offerId, { status: 'accepted' }, ids.seller);
+
+  assert.deepEqual(notifications, [
+    {
+      user_id: ids.buyer,
+      actor_id: ids.seller,
+      title: '価格提案が承認されました',
+      type: 'info',
       transaction_id: ids.transaction,
     },
   ]);
