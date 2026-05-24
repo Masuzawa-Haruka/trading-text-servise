@@ -13,6 +13,12 @@ type BoughtTransaction = {
   itemTitle: string;
 };
 
+type ItemStatusGroup = {
+  status: ItemStatus;
+  title: string;
+  items: Item[];
+};
+
 export default function MyPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -66,16 +72,10 @@ export default function MyPage() {
             return;
           }
           if (loadedProfile === null) {
-            setError(
-              caughtError instanceof Error
-                ? caughtError.message
-                : "プロフィールを取得できませんでした",
-            );
+            setError(getMyPageErrorMessage(caughtError, "プロフィールを取得できませんでした"));
           } else {
             setHistoryError(
-              caughtError instanceof Error
-                ? caughtError.message
-                : "取引・出品履歴を取得できませんでした",
+              getMyPageErrorMessage(caughtError, "取引・出品履歴を取得できませんでした"),
             );
           }
         }
@@ -93,6 +93,12 @@ export default function MyPage() {
       ignore = true;
     };
   }, [reloadKey, router]);
+
+  const soldItemGroups: ItemStatusGroup[] = ITEM_STATUSES.map((status) => ({
+    status,
+    title: itemStatusGroupLabel(status),
+    items: soldItems.filter((item) => item.status === status),
+  }));
 
   return (
     <main className="mx-auto min-h-dvh max-w-[430px] bg-[#f5f7fb] pb-24">
@@ -143,75 +149,60 @@ export default function MyPage() {
       ) : null}
 
       <section className="mt-3 bg-white">
-        <div className="divide-y divide-slate-100 px-4 py-2">
-          <div className="py-2">
-            <h3 className="mb-2 text-sm font-bold text-slate-500">
-              出品した参考書 ({soldItems.length})
-            </h3>
-            {historyLoading ? (
-              <p className="text-xs text-slate-400">読み込み中...</p>
-            ) : historyError ? (
-              <div>
-                <p className="text-xs font-bold text-red-500">{historyError}</p>
-                <button
-                  type="button"
-                  onClick={() => setReloadKey((current) => current + 1)}
-                  className="mt-2 rounded-full border border-red-200 px-3 py-1.5 text-xs font-bold text-red-600"
-                >
-                  再読み込み
-                </button>
-              </div>
-            ) : soldItems.length > 0 ? (
-              <ul className="space-y-2">
-                {soldItems.map((item) => (
-                  <li key={item.id} className="flex justify-between rounded bg-slate-50 p-2 text-sm text-slate-700">
-                    <Link href={`/items/${item.id}`} className="flex-1 truncate hover:underline">
-                      {item.title}
-                    </Link>
-                    <span className="ml-2 text-xs font-bold text-blue-600">{statusLabel(item.status)}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-xs text-slate-400">まだありません</p>
-            )}
-          </div>
+        <HistorySectionHeader title="出品した参考書" count={soldItems.length} />
+        <div className="px-4 pb-4">
+          {historyLoading ? (
+            <HistoryLoading />
+          ) : historyError ? (
+            <HistoryError
+              message={historyError}
+              onRetry={() => setReloadKey((current) => current + 1)}
+            />
+          ) : soldItems.length > 0 ? (
+            <div className="space-y-4">
+              {soldItemGroups.map((group) => (
+                <SoldItemGroup key={group.status} group={group} />
+              ))}
+            </div>
+          ) : (
+            <EmptyHistory
+              title="まだ出品した参考書がありません"
+              description="使い終わった参考書を出品すると、ここで状態を確認できます。"
+              href="/sell"
+              actionLabel="出品する"
+            />
+          )}
         </div>
-        <div className="divide-y divide-slate-100 px-4 py-2">
-          <div className="py-2">
-            <h3 className="mb-2 text-sm font-bold text-slate-500">
-              購入取引 ({boughtTransactions.length})
-            </h3>
-            {historyLoading ? (
-              <p className="text-xs text-slate-400">読み込み中...</p>
-            ) : historyError ? (
-              <div>
-                <p className="text-xs font-bold text-red-500">{historyError}</p>
-                <button
-                  type="button"
-                  onClick={() => setReloadKey((current) => current + 1)}
-                  className="mt-2 rounded-full border border-red-200 px-3 py-1.5 text-xs font-bold text-red-600"
-                >
-                  再読み込み
-                </button>
-              </div>
-            ) : boughtTransactions.length > 0 ? (
-              <ul className="space-y-2">
-                {boughtTransactions.map(({ transaction, itemTitle }) => (
-                  <li key={transaction.id} className="flex justify-between rounded bg-slate-50 p-2 text-sm text-slate-700">
-                    <span className="flex-1 truncate">
-                      <Link href={`/transactions/${transaction.id}`} className="hover:underline">
-                        {itemTitle}
-                      </Link>
-                    </span>
-                    <span className="ml-2 text-xs font-bold text-blue-600">{statusLabel(transaction.status)}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-xs text-slate-400">まだありません</p>
-            )}
-          </div>
+
+        <div className="border-t border-slate-100" />
+
+        <HistorySectionHeader title="購入取引" count={boughtTransactions.length} />
+        <div className="px-4 pb-4">
+          {historyLoading ? (
+            <HistoryLoading />
+          ) : historyError ? (
+            <HistoryError
+              message={historyError}
+              onRetry={() => setReloadKey((current) => current + 1)}
+            />
+          ) : boughtTransactions.length > 0 ? (
+            <ul className="space-y-2">
+              {boughtTransactions.map(({ transaction, itemTitle }) => (
+                <BoughtTransactionCard
+                  key={transaction.id}
+                  transaction={transaction}
+                  itemTitle={itemTitle}
+                />
+              ))}
+            </ul>
+          ) : (
+            <EmptyHistory
+              title="まだ購入取引がありません"
+              description="気になる参考書を見つけたら、取引開始後にここへ表示されます。"
+              href="/"
+              actionLabel="探す"
+            />
+          )}
         </div>
       </section>
 
@@ -237,6 +228,158 @@ export default function MyPage() {
 
 const ITEM_STATUSES: ItemStatus[] = ["available", "matching", "completed", "canceled"];
 
+function HistorySectionHeader({ title, count }: { title: string; count: number }) {
+  return (
+    <div className="flex items-center justify-between px-4 pb-2 pt-4">
+      <h3 className="text-sm font-black text-slate-700">{title}</h3>
+      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500">
+        {count}件
+      </span>
+    </div>
+  );
+}
+
+function HistoryLoading() {
+  return (
+    <div className="space-y-2">
+      <div className="h-14 rounded-md bg-slate-100" />
+      <div className="h-14 rounded-md bg-slate-50" />
+    </div>
+  );
+}
+
+function HistoryError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="rounded-md bg-red-50 px-3 py-3">
+      <p className="text-xs font-bold leading-5 text-red-600">{message}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-2 rounded-full border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-600"
+      >
+        再読み込み
+      </button>
+    </div>
+  );
+}
+
+function EmptyHistory({
+  title,
+  description,
+  href,
+  actionLabel,
+}: {
+  title: string;
+  description: string;
+  href: string;
+  actionLabel: string;
+}) {
+  return (
+    <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-4">
+      <p className="text-sm font-bold text-slate-700">{title}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
+      <Link
+        href={href}
+        className="mt-3 inline-flex rounded-full bg-blue-600 px-4 py-2 text-xs font-bold text-white"
+      >
+        {actionLabel}
+      </Link>
+    </div>
+  );
+}
+
+function SoldItemGroup({ group }: { group: ItemStatusGroup }) {
+  return (
+    <section>
+      <div className="mb-2 flex items-center justify-between">
+        <h4 className="text-xs font-black text-slate-500">{group.title}</h4>
+        <span className="text-xs font-bold text-slate-400">{group.items.length}</span>
+      </div>
+      {group.items.length > 0 ? (
+        <ul className="space-y-2">
+          {group.items.map((item) => (
+            <li key={item.id}>
+              <Link
+                href={`/items/${item.id}`}
+                className="block rounded-md border border-slate-100 bg-white px-3 py-3 shadow-sm hover:bg-slate-50"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-slate-900">{item.title}</p>
+                    <p className="mt-1 truncate text-xs text-slate-500">
+                      {[item.author, item.category].filter(Boolean).join(" / ") || "詳細未設定"}
+                    </p>
+                  </div>
+                  <StatusBadge label={statusLabel(item.status)} tone={statusTone(item.status)} />
+                </div>
+                <div className="mt-2 flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-700">{formatPrice(item.price)}</span>
+                  <span className="text-slate-400">詳細を見る</span>
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-400">
+          この状態の出品はありません
+        </p>
+      )}
+    </section>
+  );
+}
+
+function BoughtTransactionCard({
+  transaction,
+  itemTitle,
+}: {
+  transaction: Transaction;
+  itemTitle: string;
+}) {
+  const meetingSummary = formatMeetingSummary(transaction);
+
+  return (
+    <li>
+      <Link
+        href={`/transactions/${transaction.id}`}
+        className="block rounded-md border border-slate-100 bg-white px-3 py-3 shadow-sm hover:bg-slate-50"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-900">{itemTitle}</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">{meetingSummary}</p>
+          </div>
+          <StatusBadge
+            label={statusLabel(transaction.status)}
+            tone={transactionStatusTone(transaction.status)}
+          />
+        </div>
+        <div className="mt-2 flex items-center justify-between text-xs">
+          <span className="font-bold text-slate-700">
+            {transaction.final_price === null ? "価格未確定" : formatPrice(transaction.final_price)}
+          </span>
+          <span className="text-slate-400">取引詳細へ</span>
+        </div>
+      </Link>
+    </li>
+  );
+}
+
+function StatusBadge({ label, tone }: { label: string; tone: "blue" | "green" | "red" | "slate" }) {
+  const toneClass = {
+    blue: "bg-blue-50 text-blue-700",
+    green: "bg-green-50 text-green-700",
+    red: "bg-red-50 text-red-700",
+    slate: "bg-slate-100 text-slate-600",
+  }[tone];
+
+  return (
+    <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-black ${toneClass}`}>
+      {label}
+    </span>
+  );
+}
+
 function statusLabel(status: string): string {
   const labels: Record<string, string> = {
     available: "出品中",
@@ -248,4 +391,80 @@ function statusLabel(status: string): string {
   };
 
   return labels[status] ?? status;
+}
+
+function itemStatusGroupLabel(status: ItemStatus): string {
+  switch (status) {
+    case "available":
+      return "出品中";
+    case "matching":
+      return "取引中";
+    case "completed":
+      return "完了";
+    case "canceled":
+      return "キャンセル";
+  }
+}
+
+function statusTone(status: ItemStatus): "blue" | "green" | "red" | "slate" {
+  switch (status) {
+    case "available":
+      return "blue";
+    case "matching":
+      return "green";
+    case "completed":
+      return "slate";
+    case "canceled":
+      return "red";
+  }
+}
+
+function transactionStatusTone(status: Transaction["status"]): "blue" | "green" | "red" | "slate" {
+  switch (status) {
+    case "proposing":
+      return "blue";
+    case "scheduled":
+      return "green";
+    case "completed":
+      return "slate";
+    case "canceled":
+      return "red";
+  }
+}
+
+function formatPrice(price: number): string {
+  return price === 0 ? "0円" : `${price.toLocaleString("ja-JP")}円`;
+}
+
+function formatMeetingSummary(transaction: Transaction): string {
+  const datetime = transaction.meeting_datetime
+    ? new Date(transaction.meeting_datetime).toLocaleString("ja-JP", {
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+  const place = transaction.meeting_place;
+
+  if (datetime && place) return `${datetime} / ${place}`;
+  if (datetime) return datetime;
+  if (place) return place;
+  return "受け渡し日時・場所は未確定";
+}
+
+function getMyPageErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) {
+    return fallback;
+  }
+
+  if (error.message.includes("タイムアウト") || error.message.includes("fetch")) {
+    return "APIに接続できません。backendが起動しているか、NEXT_PUBLIC_API_BASE_URLを確認してください。";
+  }
+
+  if (error.message.includes("ログイン") || error.message.includes("認証")) {
+    return "ログイン状態を確認してください。再ログインすると解消する場合があります。";
+  }
+
+  return error.message || fallback;
 }
