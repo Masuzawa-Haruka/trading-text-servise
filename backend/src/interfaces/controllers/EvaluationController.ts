@@ -5,14 +5,34 @@ import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth';
 import { SubmitEvaluationUseCase } from '../../usecases/SubmitEvaluationUseCase';
 import { GetEvaluationsUseCase } from '../../usecases/GetEvaluationsUseCase';
+import { GetMyEvaluationsUseCase } from '../../usecases/GetMyEvaluationsUseCase';
 import { NotFoundError, ForbiddenError, ValidationError } from '../../domain/errors';
 import { isValidUuid } from '../../lib/validation';
 
 export class EvaluationController {
   constructor(
     private readonly submitEvaluationUseCase: SubmitEvaluationUseCase,
-    private readonly getEvaluationsUseCase: GetEvaluationsUseCase
+    private readonly getEvaluationsUseCase: GetEvaluationsUseCase,
+    private readonly getMyEvaluationsUseCase: GetMyEvaluationsUseCase
   ) {}
+
+  /**
+   * 認証ユーザーが受けた評価履歴を取得する
+   * GET /api/evaluations/me
+   */
+  async getMyEvaluations(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: '認証が必要です' });
+        return;
+      }
+
+      const evaluations = await this.getMyEvaluationsUseCase.execute(req.user.id);
+      res.status(200).json(evaluations);
+    } catch (error) {
+      this.handleError(res, error, '[EvaluationController.getMyEvaluations]');
+    }
+  }
 
   /**
    * 評価一覧を取得する

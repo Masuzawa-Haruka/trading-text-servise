@@ -16,6 +16,14 @@ export interface EvaluationEntity {
 }
 
 /**
+ * 信用スコア画面で表示する、自分が受けた評価履歴。
+ * 相互評価は取引完了後のみ、ペナルティ評価は即時表示される。
+ */
+export interface ReceivedEvaluationEntity extends EvaluationEntity {
+  item_title: string | null;
+}
+
+/**
  * 評価送信時の入力データ
  */
 export interface SubmitEvaluationInput {
