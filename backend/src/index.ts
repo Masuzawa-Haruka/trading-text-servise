@@ -12,6 +12,7 @@ import messageRoutes from './infrastructure/routes/messageRoutes';
 import evaluationRoutes from './infrastructure/routes/evaluationRoutes';
 import cancellationRoutes from './infrastructure/routes/cancellationRoutes';
 import reportRoutes from './infrastructure/routes/reportRoutes';
+import notificationRoutes from './infrastructure/routes/notificationRoutes';
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -37,6 +38,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/evaluations', evaluationRoutes);
 app.use('/api/cancellations', cancellationRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.listen(Number(port), host, () => {
   console.log(`Server is running at http://${host}:${port}`);
