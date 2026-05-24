@@ -15,6 +15,38 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 `npm run dev:mock` enables `NEXT_PUBLIC_AUTH_MOCK_ENABLED=true` and uses a fixed mock Supabase user for frontend screens that need authentication. The code rejects this flag in production-like environments, and it must not be set in staging or production.
 
+Run the backend before opening screens that call `/api/*`, including
+`/mypage`:
+
+```bash
+cd backend
+npm run dev
+
+# In another terminal, verify the frontend can reach the API.
+cd frontend
+npm run check:api
+```
+
+For smartphone testing on the same Wi-Fi, bind both dev servers to the LAN and
+set the frontend API URL to your Mac's current IP address:
+
+```bash
+# backend
+cd backend
+npm run dev:lan
+
+# frontend/.env.local
+NEXT_PUBLIC_API_BASE_URL=http://<MacのIP>:3001
+
+# frontend
+cd frontend
+npm run dev:lan
+```
+
+Then open `http://<MacのIP>:3000` on the phone. If `/mypage` shows an API
+timeout, run `cd frontend && npm run check:api`; it should print
+`API is reachable`.
+
 For real Supabase Auth integration, set these frontend variables:
 
 ```bash
