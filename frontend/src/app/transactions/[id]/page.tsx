@@ -6,6 +6,12 @@ import { useParams, useRouter } from "next/navigation";
 import { MOCK_AUTH_ENABLED, MOCK_USER_ID } from "@/lib/auth/mock";
 import { getItem, type Item } from "@/lib/items/api";
 import { mockStore, type MockLocation } from "@/lib/mockStore";
+import {
+  getPriceOffers,
+  respondPriceOffer,
+  sendPriceOffer,
+  type PriceOffer,
+} from "@/lib/priceOffers/api";
 import { createClient } from "@/lib/supabase/client";
 import {
   executeCancellation,
@@ -16,7 +22,6 @@ import {
   sendScheduleProposal,
   sendTransactionMessage,
   submitEvaluation,
-  updateTransaction,
   type EvaluationType,
   type ScheduleProposal,
   type Transaction,
@@ -45,6 +50,7 @@ export default function TransactionPage() {
   const [item, setItem] = useState<Item | null>(null);
   const [messages, setMessages] = useState<TransactionMessage[]>([]);
   const [proposals, setProposals] = useState<ScheduleProposal[]>([]);
+  const [priceOffers, setPriceOffers] = useState<PriceOffer[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [locations, setLocations] = useState<MockLocation[]>([]);
   const [text, setText] = useState("");
@@ -53,8 +59,10 @@ export default function TransactionPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showPriceOfferModal, setShowPriceOfferModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showEvaluationModal, setShowEvaluationModal] = useState(false);
+  const [offerPrice, setOfferPrice] = useState("");
   const [cancelReason, setCancelReason] = useState("");
   const [evaluationType, setEvaluationType] = useState<EvaluationType>("good");
   const [selectedArea, setSelectedArea] = useState("");
@@ -78,11 +86,12 @@ export default function TransactionPage() {
       setLocations(mockStore.getLocations());
 
       const nextTransaction = await getTransaction(transactionId);
-      const [nextItem, nextProposals] = await Promise.all([
+      const [nextItem, nextProposals, nextPriceOffers] = await Promise.all([
         getItem(nextTransaction.item_id),
         nextTransaction.status === "proposing"
           ? getScheduleProposals(nextTransaction.id).catch(() => [])
           : Promise.resolve([]),
+        getPriceOffers(nextTransaction.id).catch(() => []),
       ]);
 
       const nextMessages =
@@ -93,6 +102,7 @@ export default function TransactionPage() {
       setTransaction(nextTransaction);
       setItem(nextItem);
       setProposals(nextProposals);
+      setPriceOffers(nextPriceOffers);
       setMessages(nextMessages);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "取引情報の取得に失敗しました");
@@ -121,9 +131,13 @@ export default function TransactionPage() {
   );
 
   const pendingProposals = proposals.filter((proposal) => proposal.status === "pending");
+  const pendingPriceOffer = priceOffers.find((offer) => offer.status === "pending") ?? null;
   const canChat = transaction?.status === "scheduled";
   const isClosed = transaction?.status === "completed" || transaction?.status === "canceled";
   const isSeller = Boolean(transaction && currentUserId && transaction.seller_id === currentUserId);
+  const canSendPriceOffer = Boolean(
+    transaction?.status === "proposing" && !pendingPriceOffer && priceOffers.length < 3,
+  );
   const hasEvaluated = Boolean(
     transaction && currentUserId && (isSeller ? transaction.seller_evaluated : transaction.buyer_evaluated),
   );
@@ -160,22 +174,20 @@ export default function TransactionPage() {
     }
 
     if (action === "price") {
-      const price = window.prompt("希望の金額を入力してください (例: 200)");
-      if (!price) return;
-      const parsedPrice = Number(price);
-      if (!Number.isInteger(parsedPrice) || parsedPrice < 0) {
-        setError("価格は0以上の整数で入力してください");
+      if (transaction.status !== "proposing") {
+        setError("価格交渉は日程確定前の取引でのみ行えます");
         return;
       }
-      setIsSubmitting(true);
-      try {
-        await updateTransaction(transaction.id, { final_price: parsedPrice });
-        await loadData();
-      } catch (actionError) {
-        setError(actionError instanceof Error ? actionError.message : "価格更新に失敗しました");
-      } finally {
-        setIsSubmitting(false);
+      if (!canSendPriceOffer) {
+        setError(
+          pendingPriceOffer
+            ? "未回答の価格提案があります"
+            : "この取引での価格交渉回数の上限（3回）に達しました",
+        );
+        return;
       }
+      setOfferPrice(String(transaction.final_price ?? item.price));
+      setShowPriceOfferModal(true);
       return;
     }
 
@@ -195,6 +207,44 @@ export default function TransactionPage() {
 
     if (action === "cancel") {
       setShowCancelModal(true);
+    }
+  }
+
+  async function submitPriceOffer() {
+    if (!transaction || isSubmitting) return;
+
+    const parsedPrice = Number(offerPrice);
+    if (!Number.isInteger(parsedPrice) || parsedPrice < 0) {
+      setError("価格は0以上の整数で入力してください");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await sendPriceOffer(transaction, parsedPrice);
+      setShowPriceOfferModal(false);
+      setOfferPrice("");
+      await loadData();
+    } catch (priceError) {
+      setError(priceError instanceof Error ? priceError.message : "価格提案の送信に失敗しました");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handlePriceOfferResponse(offerId: string, status: "accepted" | "rejected") {
+    if (!transaction || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await respondPriceOffer(transaction, offerId, status);
+      await loadData();
+    } catch (priceError) {
+      setError(priceError instanceof Error ? priceError.message : "価格提案への回答に失敗しました");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -345,6 +395,81 @@ export default function TransactionPage() {
           </div>
         )}
 
+        {(transaction.status === "proposing" || priceOffers.length > 0) && (
+          <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-bold text-slate-900">価格交渉</div>
+                <div className="mt-1 text-xs leading-relaxed text-slate-500">
+                  {transaction.final_price !== null
+                    ? `${formatPrice(transaction.final_price)}で合意済みです。`
+                    : pendingPriceOffer
+                      ? "未回答の価格提案があります。回答後に次の提案ができます。"
+                      : "最大3回まで価格提案できます。"}
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
+                {priceOffers.length}/3回
+              </span>
+            </div>
+
+            {priceOffers.length > 0 && (
+              <ul className="mt-3 space-y-2">
+                {priceOffers.map((offer) => {
+                  const isMine = offer.sender_id === currentUserId;
+                  const canRespond = !isMine && offer.status === "pending" && transaction.status === "proposing";
+                  return (
+                    <li key={offer.id} className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-bold text-slate-500">
+                            {offer.offer_count}回目 / {isMine ? "あなたの提案" : `${partnerLabel}からの提案`}
+                          </div>
+                          <div className="mt-1 text-lg font-black text-slate-900">
+                            {formatPrice(offer.price)}
+                          </div>
+                        </div>
+                        <PriceOfferBadge status={offer.status} />
+                      </div>
+                      {canRespond && (
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => handlePriceOfferResponse(offer.id, "rejected")}
+                            disabled={isSubmitting}
+                            className="rounded-full bg-slate-100 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
+                          >
+                            見送る
+                          </button>
+                          <button
+                            onClick={() => handlePriceOfferResponse(offer.id, "accepted")}
+                            disabled={isSubmitting}
+                            className="rounded-full bg-[#0047c7] py-2 text-xs font-bold text-white disabled:opacity-50"
+                          >
+                            承認する
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            {transaction.status === "proposing" && canSendPriceOffer && (
+              <button
+                onClick={() => {
+                  setOfferPrice(String(transaction.final_price ?? item.price));
+                  setShowPriceOfferModal(true);
+                }}
+                disabled={isSubmitting}
+                className="mt-3 w-full rounded-full bg-[#0047c7] py-2.5 text-xs font-bold text-white shadow-sm disabled:opacity-50"
+              >
+                価格を提案する
+              </button>
+            )}
+          </div>
+        )}
+
         {(transaction.status === "scheduled" || transaction.status === "completed") && (
           <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700 shadow-sm">
             <div className="flex items-start justify-between gap-3">
@@ -452,6 +577,70 @@ export default function TransactionPage() {
             <ActionButton label="価格交渉" icon="¥" onClick={() => handleAction("price")} />
             <ActionButton label="キャンセル" icon="✕" onClick={() => handleAction("cancel")} />
             <ActionButton label={hasEvaluated ? "評価済み" : "完了"} icon="✓" onClick={() => handleAction("evaluate")} />
+          </div>
+        </div>
+      )}
+
+      {showPriceOfferModal && (
+        <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/40">
+          <div className="w-full max-w-[430px] rounded-t-2xl bg-white">
+            <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <h2 className="text-sm font-bold text-slate-900">価格を提案</h2>
+              <button
+                onClick={() => setShowPriceOfferModal(false)}
+                className="text-2xl leading-none text-slate-400"
+                disabled={isSubmitting}
+              >
+                &times;
+              </button>
+            </header>
+
+            <div className="space-y-4 p-4">
+              {error && (
+                <div className="rounded-lg bg-red-50 p-3 text-xs font-bold text-red-700">
+                  {error}
+                </div>
+              )}
+
+              <div className="rounded-lg bg-blue-50 p-3 text-xs font-bold leading-relaxed text-blue-900">
+                価格提案は1取引につき最大3回までです。未回答の提案がある間は次の提案はできません。
+              </div>
+
+              <label className="block text-xs font-bold text-slate-600">
+                提案価格
+                <div className="mt-2 flex items-center rounded-lg border border-slate-300 bg-white px-3 focus-within:border-[#0047c7]">
+                  <span className="text-sm font-bold text-slate-500">¥</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    inputMode="numeric"
+                    value={offerPrice}
+                    onChange={(event) => setOfferPrice(event.target.value)}
+                    className="min-w-0 flex-1 bg-transparent px-2 py-3 text-lg font-black text-slate-900 outline-none"
+                    placeholder="例: 300"
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </label>
+            </div>
+
+            <div className="flex gap-2 border-t border-slate-100 p-4">
+              <button
+                onClick={() => setShowPriceOfferModal(false)}
+                disabled={isSubmitting}
+                className="flex-1 rounded-full bg-slate-100 py-3 text-sm font-bold text-slate-700 disabled:opacity-50"
+              >
+                戻る
+              </button>
+              <button
+                onClick={submitPriceOffer}
+                disabled={isSubmitting || offerPrice.trim() === ""}
+                className="flex-1 rounded-full bg-[#0047c7] py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50"
+              >
+                提案する
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -785,4 +974,22 @@ function ActionButton({
       <span className="text-[10px] font-bold text-slate-700">{label}</span>
     </button>
   );
+}
+
+function PriceOfferBadge({ status }: { status: PriceOffer["status"] }) {
+  const badge = {
+    pending: { label: "回答待ち", className: "bg-blue-50 text-blue-700" },
+    accepted: { label: "承認済み", className: "bg-green-50 text-green-700" },
+    rejected: { label: "見送り", className: "bg-slate-100 text-slate-600" },
+  }[status];
+
+  return (
+    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black ${badge.className}`}>
+      {badge.label}
+    </span>
+  );
+}
+
+function formatPrice(price: number): string {
+  return price === 0 ? "0円" : `${price.toLocaleString("ja-JP")}円`;
 }
