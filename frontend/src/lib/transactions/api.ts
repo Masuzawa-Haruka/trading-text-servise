@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
-import { MOCK_AUTH_ENABLED, MOCK_USER_ID } from "@/lib/auth/mock";
+import { MOCK_AUTH_ENABLED } from "@/lib/auth/mock";
 import { campusLabel, conditionLabel, type Item } from "@/lib/items/api";
 import { mockStore, type MockItem, type MockTransaction } from "@/lib/mockStore";
 
@@ -64,6 +64,19 @@ export type CancellationRequest = {
   requester_id: string;
   reason: string | null;
   status: "pending" | "accepted" | "rejected";
+  created_at: string;
+  updated_at: string;
+};
+
+export type EvaluationType = "good" | "bad";
+
+export type Evaluation = {
+  id: string;
+  transaction_id: string;
+  target_user_id: string;
+  reviewer_id: string | null;
+  score_change: number;
+  type: EvaluationType | "cancel" | "no_show";
   created_at: string;
   updated_at: string;
 };
@@ -274,6 +287,24 @@ export async function executeCancellation(
   return parseJsonResponse<CancellationRequest>(response, "キャンセル実行に失敗しました");
 }
 
+export async function submitEvaluation(
+  transaction: Transaction,
+  type: EvaluationType,
+): Promise<Evaluation> {
+  if (MOCK_AUTH_ENABLED) {
+    return submitMockEvaluation(transaction, type);
+  }
+
+  const response = await apiFetch("/api/evaluations", {
+    method: "POST",
+    body: JSON.stringify({
+      transaction_id: transaction.id,
+      type,
+    }),
+  });
+  return parseJsonResponse<Evaluation>(response, "評価の送信に失敗しました");
+}
+
 async function parseJsonResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
   const data = await response.json().catch(() => null);
 
@@ -360,6 +391,31 @@ function executeMockCancellation(transaction: Transaction, reason?: string): Can
   };
 }
 
+function submitMockEvaluation(transaction: Transaction, type: EvaluationType): Evaluation {
+  const updatedTransaction = mockStore.submitEvaluation(transaction.id, mockStore.currentUser.id, type);
+  const targetUserId =
+    mockStore.currentUser.id === updatedTransaction.sellerId
+      ? updatedTransaction.buyerId
+      : updatedTransaction.sellerId;
+
+  updateMockApiItemStatus(
+    updatedTransaction.itemId,
+    updatedTransaction.status === "completed" ? "completed" : "matching",
+  );
+
+  const now = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    transaction_id: updatedTransaction.id,
+    target_user_id: targetUserId,
+    reviewer_id: mockStore.currentUser.id,
+    score_change: type === "good" ? 10 : -10,
+    type,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
 function ensureMockStoreItem(item: Item): void {
   if (typeof window === "undefined") return;
 
@@ -418,8 +474,8 @@ function toApiTransaction(
     status: transaction.status,
     meeting_datetime: override.meeting_datetime ?? null,
     meeting_place: override.meeting_place ?? null,
-    seller_evaluated: false,
-    buyer_evaluated: false,
+    seller_evaluated: transaction.sellerEvaluated ?? false,
+    buyer_evaluated: transaction.buyerEvaluated ?? false,
     created_at: now,
     updated_at: now,
   };
