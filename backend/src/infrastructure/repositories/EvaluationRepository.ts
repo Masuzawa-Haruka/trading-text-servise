@@ -3,7 +3,7 @@
  */
 import { prisma } from '../../lib/prisma';
 import { IEvaluationRepository } from '../../domain/repositories/IEvaluationRepository';
-import { EvaluationEntity, PendingEvaluationData, EvaluationType } from '../../domain/evaluation';
+import { EvaluationEntity, EvaluationType, ReceivedEvaluationEntity } from '../../domain/evaluation';
 import { Evaluation } from '@prisma/client';
 
 export class EvaluationRepository implements IEvaluationRepository {
@@ -12,6 +12,33 @@ export class EvaluationRepository implements IEvaluationRepository {
       where: { transaction_id: transactionId },
     });
     return evaluations.map((e) => this.toEntity(e));
+  }
+
+  async findVisibleReceivedByUserId(userId: string): Promise<ReceivedEvaluationEntity[]> {
+    const evaluations = await prisma.evaluation.findMany({
+      where: {
+        target_user_id: userId,
+        OR: [
+          { type: { in: ['cancel', 'no_show'] } },
+          { transaction: { status: 'completed' } },
+        ],
+      },
+      include: {
+        transaction: {
+          include: {
+            item: {
+              select: { title: true },
+            },
+          },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    return evaluations.map((e) => ({
+      ...this.toEntity(e),
+      item_title: e.transaction.item?.title ?? null,
+    }));
   }
 
   async submitEvaluationAtomically(
