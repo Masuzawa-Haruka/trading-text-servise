@@ -34,6 +34,32 @@ type Candidate = {
   locationId: string;
 };
 
+type NextActionTone = "blue" | "green" | "amber" | "red" | "slate";
+
+type NextActionCommand =
+  | "accept-price"
+  | "evaluate"
+  | "message"
+  | "price"
+  | "reject-price"
+  | "review-action"
+  | "schedule";
+
+type NextActionButton = {
+  label: string;
+  command: NextActionCommand;
+  variant: "primary" | "secondary" | "danger";
+};
+
+type NextAction = {
+  title: string;
+  description: string;
+  badge: string;
+  tone: NextActionTone;
+  primary?: NextActionButton;
+  secondary?: NextActionButton;
+};
+
 const STATUS_LABEL: Record<Transaction["status"], string> = {
   proposing: "日程調整中",
   scheduled: "予定決定済",
@@ -132,6 +158,15 @@ export default function TransactionPage() {
 
   const pendingProposals = proposals.filter((proposal) => proposal.status === "pending");
   const pendingPriceOffer = priceOffers.find((offer) => offer.status === "pending") ?? null;
+  const pendingProposal = pendingProposals[0] ?? null;
+  const pendingPriceOfferIsMine = Boolean(
+    pendingPriceOffer && currentUserId && pendingPriceOffer.sender_id === currentUserId,
+  );
+  const pendingProposalIsMine = Boolean(
+    pendingProposal &&
+      currentUserId &&
+      (pendingProposal.sender_id === currentUserId || (MOCK_AUTH_ENABLED && currentUserId === MOCK_USER_ID)),
+  );
   const canChat = transaction?.status === "scheduled";
   const isClosed = transaction?.status === "completed" || transaction?.status === "canceled";
   const isSeller = Boolean(transaction && currentUserId && transaction.seller_id === currentUserId);
@@ -145,6 +180,19 @@ export default function TransactionPage() {
     transaction && currentUserId && (isSeller ? transaction.buyer_evaluated : transaction.seller_evaluated),
   );
   const partnerLabel = isSeller ? "購入希望者" : "出品者";
+  const nextAction = transaction
+    ? buildNextAction({
+        transaction,
+        pendingPriceOffer,
+        pendingPriceOfferIsMine,
+        pendingProposal,
+        pendingProposalIsMine,
+        priceOfferCount: priceOffers.length,
+        hasEvaluated,
+        counterpartHasEvaluated,
+      })
+    : null;
+  const footerAction = nextAction ? buildFooterAction(nextAction, transaction?.status) : null;
 
   async function handleSend() {
     const content = text.trim();
@@ -169,6 +217,10 @@ export default function TransactionPage() {
     setError(null);
 
     if (action === "schedule") {
+      if (pendingPriceOffer) {
+        setError("未回答の価格提案があります。価格提案への回答後に日程を提案してください");
+        return;
+      }
       setShowScheduleModal(true);
       return;
     }
@@ -208,6 +260,26 @@ export default function TransactionPage() {
     if (action === "cancel") {
       setShowCancelModal(true);
     }
+  }
+
+  function handleNextAction(command: NextActionCommand) {
+    if (command === "review-action") {
+      scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (command === "accept-price" || command === "reject-price") {
+      if (!pendingPriceOffer) return;
+      void handlePriceOfferResponse(
+        pendingPriceOffer.id,
+        command === "accept-price" ? "accepted" : "rejected",
+      );
+      return;
+    }
+    if (command === "message") {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+      return;
+    }
+    void handleAction(command);
   }
 
   async function submitPriceOffer() {
@@ -383,9 +455,9 @@ export default function TransactionPage() {
           <div className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{error}</div>
         )}
 
-        <div className="mx-auto rounded-full bg-slate-200 px-3 py-1 text-xs text-slate-500">
-          取引が開始されました。日程を確定するとメッセージを送れます。
-        </div>
+        {nextAction && (
+          <NextActionCard action={nextAction} onAction={handleNextAction} isSubmitting={isSubmitting} />
+        )}
 
         {transaction.meeting_datetime && transaction.meeting_place && (
           <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
@@ -573,7 +645,12 @@ export default function TransactionPage() {
         <div className="absolute bottom-20 left-0 right-0 z-20 mx-auto max-w-[430px] rounded-t-2xl border-t border-slate-100 bg-white px-4 py-4 shadow-[0_-10px_20px_rgba(0,0,0,0.1)]">
           <h3 className="mb-3 text-xs font-bold text-slate-500">取引アクション</h3>
           <div className="grid grid-cols-4 gap-2">
-            <ActionButton label="日程提案" icon="📅" onClick={() => handleAction("schedule")} />
+            <ActionButton
+              label="日程提案"
+              icon="📅"
+              onClick={() => handleAction("schedule")}
+              disabled={Boolean(pendingPriceOffer)}
+            />
             <ActionButton label="価格交渉" icon="¥" onClick={() => handleAction("price")} />
             <ActionButton label="キャンセル" icon="✕" onClick={() => handleAction("cancel")} />
             <ActionButton label={hasEvaluated ? "評価済み" : "完了"} icon="✓" onClick={() => handleAction("evaluate")} />
@@ -675,11 +752,17 @@ export default function TransactionPage() {
         ) : (
           <div className="flex gap-2">
             <button
-              onClick={() => handleAction("schedule")}
-              disabled={isSubmitting || isClosed}
+              onClick={() => {
+                if (footerAction) {
+                  handleNextAction(footerAction.command);
+                  return;
+                }
+                void handleAction("schedule");
+              }}
+              disabled={isSubmitting || isClosed || !footerAction}
               className="flex-1 rounded-full bg-[#0047c7] py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50"
             >
-              日程を提案する
+              {footerAction?.label ?? "取引は終了しています"}
             </button>
             <button
               onClick={() => setShowMenu(!showMenu)}
@@ -961,17 +1044,101 @@ function ActionButton({
   label,
   icon,
   onClick,
+  disabled = false,
 }: {
   label: string;
   icon: string;
   onClick: () => void;
+  disabled?: boolean;
 }) {
   return (
-    <button onClick={onClick} className="flex flex-col items-center gap-1">
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex flex-col items-center gap-1 disabled:opacity-40"
+    >
       <div className="grid size-12 place-items-center rounded-full bg-blue-50 text-xl font-bold text-[#0047c7]">
         {icon}
       </div>
       <span className="text-[10px] font-bold text-slate-700">{label}</span>
+    </button>
+  );
+}
+
+function NextActionCard({
+  action,
+  onAction,
+  isSubmitting,
+}: {
+  action: NextAction;
+  onAction: (command: NextActionCommand) => void;
+  isSubmitting: boolean;
+}) {
+  const tone = {
+    blue: "border-blue-100 bg-blue-50 text-blue-950",
+    green: "border-green-100 bg-green-50 text-green-950",
+    amber: "border-amber-100 bg-amber-50 text-amber-950",
+    red: "border-red-100 bg-red-50 text-red-950",
+    slate: "border-slate-200 bg-white text-slate-900",
+  }[action.tone];
+
+  return (
+    <section className={`rounded-lg border p-3 text-sm shadow-sm ${tone}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-black opacity-70">次にやること</div>
+          <h2 className="mt-1 text-base font-black">{action.title}</h2>
+          <p className="mt-1 text-xs leading-relaxed opacity-80">{action.description}</p>
+        </div>
+        <span className="shrink-0 rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-black">
+          {action.badge}
+        </span>
+      </div>
+
+      {(action.primary || action.secondary) && (
+        <div className="mt-3 flex gap-2">
+          {action.secondary && (
+            <NextActionCardButton
+              button={action.secondary}
+              onAction={onAction}
+              isSubmitting={isSubmitting}
+            />
+          )}
+          {action.primary && (
+            <NextActionCardButton
+              button={action.primary}
+              onAction={onAction}
+              isSubmitting={isSubmitting}
+            />
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function NextActionCardButton({
+  button,
+  onAction,
+  isSubmitting,
+}: {
+  button: NextActionButton;
+  onAction: (command: NextActionCommand) => void;
+  isSubmitting: boolean;
+}) {
+  const className = {
+    primary: "bg-[#0047c7] text-white",
+    secondary: "bg-white text-slate-700",
+    danger: "bg-red-600 text-white",
+  }[button.variant];
+
+  return (
+    <button
+      onClick={() => onAction(button.command)}
+      disabled={isSubmitting}
+      className={`flex-1 rounded-full px-3 py-2.5 text-xs font-black shadow-sm disabled:opacity-50 ${className}`}
+    >
+      {button.label}
     </button>
   );
 }
@@ -992,4 +1159,167 @@ function PriceOfferBadge({ status }: { status: PriceOffer["status"] }) {
 
 function formatPrice(price: number): string {
   return price === 0 ? "0円" : `${price.toLocaleString("ja-JP")}円`;
+}
+
+function buildFooterAction(
+  action: NextAction,
+  status: Transaction["status"] | undefined,
+): NextActionButton | null {
+  if (status === "completed" || status === "canceled") {
+    return null;
+  }
+  if (action.primary?.command === "accept-price" || action.primary?.command === "reject-price") {
+    return { label: "価格提案を確認する", command: "review-action", variant: "primary" };
+  }
+  if (action.primary) {
+    return action.primary;
+  }
+  if (status === "proposing" && action.badge === "価格待ち") {
+    return { label: "価格回答待ちです", command: "review-action", variant: "primary" };
+  }
+  if (status === "proposing" && action.badge === "日程待ち") {
+    return { label: "日程回答待ちです", command: "review-action", variant: "primary" };
+  }
+  if (status === "proposing" && action.badge === "要回答") {
+    return { label: "日程候補を確認する", command: "review-action", variant: "primary" };
+  }
+  if (status === "proposing") {
+    return { label: "日程を提案する", command: "schedule", variant: "primary" };
+  }
+  return null;
+}
+
+function buildNextAction({
+  transaction,
+  pendingPriceOffer,
+  pendingPriceOfferIsMine,
+  pendingProposal,
+  pendingProposalIsMine,
+  priceOfferCount,
+  hasEvaluated,
+  counterpartHasEvaluated,
+}: {
+  transaction: Transaction;
+  pendingPriceOffer: PriceOffer | null;
+  pendingPriceOfferIsMine: boolean;
+  pendingProposal: ScheduleProposal | null;
+  pendingProposalIsMine: boolean;
+  priceOfferCount: number;
+  hasEvaluated: boolean;
+  counterpartHasEvaluated: boolean;
+}): NextAction {
+  if (transaction.status === "canceled") {
+    return {
+      title: "この取引はキャンセル済みです",
+      description: "出品は再公開され、これ以上の取引操作はできません。必要ならヘルプ・サポートから相談できます。",
+      badge: "終了",
+      tone: "red",
+    };
+  }
+
+  if (transaction.status === "completed") {
+    return {
+      title: "取引は完了しています",
+      description: "双方の評価が揃い、信用スコアへの反映まで完了しています。",
+      badge: "完了",
+      tone: "green",
+    };
+  }
+
+  if (transaction.status === "scheduled") {
+    if (!hasEvaluated) {
+      return {
+        title: "受け渡し後に評価してください",
+        description: "受け渡しが終わったら相手を評価すると、取引完了へ進めます。連絡が必要なら下のメッセージを使えます。",
+        badge: "評価待ち",
+        tone: "blue",
+        primary: { label: "評価して完了へ進む", command: "evaluate", variant: "primary" },
+        secondary: { label: "メッセージする", command: "message", variant: "secondary" },
+      };
+    }
+
+    if (!counterpartHasEvaluated) {
+      return {
+        title: "相手の評価待ちです",
+        description: "あなたの評価は送信済みです。相手の評価が完了すると取引完了になります。",
+        badge: "相手待ち",
+        tone: "amber",
+        primary: { label: "メッセージする", command: "message", variant: "primary" },
+      };
+    }
+
+    return {
+      title: "取引完了を反映中です",
+      description: "双方の評価が揃っています。画面を再読み込みすると完了状態に更新されます。",
+      badge: "反映中",
+      tone: "green",
+    };
+  }
+
+  if (pendingPriceOffer) {
+    if (pendingPriceOfferIsMine) {
+      return {
+        title: "価格提案の回答待ちです",
+        description: `${formatPrice(pendingPriceOffer.price)}で提案中です。相手が承認または見送りするまで、日程提案は待ちましょう。`,
+        badge: "価格待ち",
+        tone: "amber",
+      };
+    }
+
+    return {
+      title: "価格提案に回答してください",
+      description: `相手から${formatPrice(pendingPriceOffer.price)}の提案が届いています。承認するとこの価格で確定します。`,
+      badge: "要回答",
+      tone: "blue",
+      primary: { label: "承認する", command: "accept-price", variant: "primary" },
+      secondary: { label: "見送る", command: "reject-price", variant: "secondary" },
+    };
+  }
+
+  if (pendingProposal) {
+    if (pendingProposalIsMine) {
+      return {
+        title: "日程提案の回答待ちです",
+        description: "相手が候補から1つ選ぶと受け渡し予定が確定し、メッセージを送れるようになります。",
+        badge: "日程待ち",
+        tone: "amber",
+      };
+    }
+
+    return {
+      title: "日程候補を確認してください",
+      description: "相手から日程候補が届いています。下の日程提案カードから都合のよい候補を選んでください。",
+      badge: "要回答",
+      tone: "blue",
+    };
+  }
+
+  if (transaction.final_price !== null) {
+    return {
+      title: "価格は確定済みです",
+      description: `${formatPrice(transaction.final_price)}で合意済みです。次は受け渡しの日程と場所を提案してください。`,
+      badge: "日程へ",
+      tone: "green",
+      primary: { label: "日程を提案する", command: "schedule", variant: "primary" },
+    };
+  }
+
+  if (priceOfferCount >= 3) {
+    return {
+      title: "価格交渉の上限に達しました",
+      description: "この取引での価格提案は3回までです。現在の価格で進める場合は日程を提案してください。",
+      badge: "3/3回",
+      tone: "amber",
+      primary: { label: "日程を提案する", command: "schedule", variant: "primary" },
+    };
+  }
+
+  return {
+    title: "価格か日程を決めましょう",
+    description: "価格を相談したい場合は価格提案へ、表示価格のまま進める場合は日程提案へ進めます。",
+    badge: "調整中",
+    tone: "slate",
+    primary: { label: "日程を提案する", command: "schedule", variant: "primary" },
+    secondary: { label: "価格を提案する", command: "price", variant: "secondary" },
+  };
 }
