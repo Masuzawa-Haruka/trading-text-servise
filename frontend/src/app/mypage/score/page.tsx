@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getMyEvaluations, type EvaluationType, type ReceivedEvaluation } from "@/lib/evaluations/api";
 import { getTransactions, type Transaction } from "@/lib/transactions/api";
 import { getMyProfile, type UserProfile } from "@/lib/users/api";
 
@@ -9,6 +10,7 @@ export default function CreditScorePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [evaluations, setEvaluations] = useState<ReceivedEvaluation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,13 +19,17 @@ export default function CreditScorePage() {
 
     async function loadScore() {
       try {
-        const [loadedProfile, loadedTransactions] = await Promise.all([
+        setLoading(true);
+        setError(null);
+        const [loadedProfile, loadedTransactions, loadedEvaluations] = await Promise.all([
           getMyProfile(),
           getTransactions(),
+          getMyEvaluations(),
         ]);
         if (!ignore) {
           setProfile(loadedProfile);
           setTransactions(loadedTransactions);
+          setEvaluations(loadedEvaluations);
         }
       } catch (caughtError) {
         if (!ignore) {
@@ -31,7 +37,7 @@ export default function CreditScorePage() {
             router.replace("/login");
             return;
           }
-          setError("信用スコアを取得できませんでした");
+          setError(getScoreErrorMessage(caughtError));
         }
       } finally {
         if (!ignore) {
@@ -55,6 +61,7 @@ export default function CreditScorePage() {
   );
   const completionRate =
     totalTransactions > 0 ? Math.round((completedTransactions / totalTransactions) * 100) : 0;
+  const summary = useMemo(() => summarizeEvaluations(evaluations), [evaluations]);
   const minScore = 100;
   const maxScore = 150;
   const progressPercent = Math.max(0, Math.min(100, ((score - minScore) / (maxScore - minScore)) * 100));
@@ -70,8 +77,8 @@ export default function CreditScorePage() {
       </header>
 
       {error ? (
-        <section className="m-4 rounded-lg bg-red-50 px-3 py-2">
-          <p className="text-xs font-bold text-red-600">{error}</p>
+        <section className="m-4 rounded-lg bg-red-50 px-3 py-3">
+          <p className="text-xs font-bold leading-5 text-red-600">{error}</p>
         </section>
       ) : null}
 
@@ -92,10 +99,10 @@ export default function CreditScorePage() {
 
           <div className="mt-4 flex gap-6 text-sm font-bold text-slate-700">
             <div>
-              取引実績 <span className="text-slate-900">{completedTransactions}件</span>
+              取引実績 <span className="text-slate-900">{loading ? "-" : `${completedTransactions}件`}</span>
             </div>
             <div>
-              完了率 <span className="text-slate-900">{completionRate}%</span>
+              完了率 <span className="text-slate-900">{loading ? "-" : `${completionRate}%`}</span>
             </div>
           </div>
 
@@ -137,20 +144,50 @@ export default function CreditScorePage() {
             icon="✓"
             title="取引の完了率"
             description="取引を最後まで完了した割合"
-            value={`${completionRate}%`}
+            value={loading ? "-" : `${completionRate}%`}
           />
           <ScoreRow
             icon="👍"
             title="良かった評価の割合"
-            description="評価機能の集計に合わせて更新予定"
-            value="-"
+            description="受け取った相互評価のうち good の割合"
+            value={loading ? "-" : `${summary.goodRate}%`}
           />
           <ScoreRow
-            icon="📄"
-            title="取引件数"
-            description="これまでに関わった取引件数"
-            value={`${totalTransactions}件`}
+            icon="!"
+            title="ペナルティ"
+            description="キャンセル・無断キャンセルの記録"
+            value={loading ? "-" : `${summary.penaltyCount}件`}
           />
+        </div>
+      </section>
+
+      <section className="mt-3 bg-white">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <h3 className="text-xs font-bold text-slate-900">評価履歴</h3>
+          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500">
+            {loading ? "-" : `${evaluations.length}件`}
+          </span>
+        </div>
+        <div className="px-4 py-3">
+          {loading ? (
+            <div className="space-y-2">
+              <div className="h-14 rounded-md bg-slate-100" />
+              <div className="h-14 rounded-md bg-slate-50" />
+            </div>
+          ) : evaluations.length > 0 ? (
+            <ul className="space-y-2">
+              {evaluations.map((evaluation) => (
+                <EvaluationHistoryRow key={evaluation.id} evaluation={evaluation} />
+              ))}
+            </ul>
+          ) : (
+            <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-4">
+              <p className="text-sm font-bold text-slate-700">まだ評価履歴はありません</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                取引完了後の相互評価やキャンセル履歴がここに表示されます。
+              </p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -200,4 +237,107 @@ function ScoreRow({
       </div>
     </div>
   );
+}
+
+function EvaluationHistoryRow({ evaluation }: { evaluation: ReceivedEvaluation }) {
+  const positive = evaluation.score_change > 0;
+
+  return (
+    <li className="rounded-md border border-slate-100 bg-white px-3 py-3 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <EvaluationTypeBadge type={evaluation.type} />
+            <span className="text-xs font-bold text-slate-400">
+              {formatDate(evaluation.created_at)}
+            </span>
+          </div>
+          <p className="mt-2 truncate text-sm font-bold text-slate-900">
+            {evaluation.item_title ?? "取引した参考書"}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            {evaluationDescription(evaluation.type)}
+          </p>
+        </div>
+        <span className={`shrink-0 text-sm font-black ${positive ? "text-green-600" : "text-red-600"}`}>
+          {positive ? "+" : ""}
+          {evaluation.score_change}
+        </span>
+      </div>
+    </li>
+  );
+}
+
+function EvaluationTypeBadge({ type }: { type: EvaluationType }) {
+  const tone = type === "good" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700";
+  return (
+    <span className={`rounded-full px-2 py-1 text-xs font-black ${tone}`}>
+      {evaluationTypeLabel(type)}
+    </span>
+  );
+}
+
+function summarizeEvaluations(evaluations: ReceivedEvaluation[]) {
+  const goodCount = evaluations.filter((evaluation) => evaluation.type === "good").length;
+  const badCount = evaluations.filter((evaluation) => evaluation.type === "bad").length;
+  const penaltyCount = evaluations.filter(
+    (evaluation) => evaluation.type === "cancel" || evaluation.type === "no_show",
+  ).length;
+  const mutualCount = goodCount + badCount;
+
+  return {
+    goodCount,
+    badCount,
+    penaltyCount,
+    goodRate: mutualCount > 0 ? Math.round((goodCount / mutualCount) * 100) : 0,
+  };
+}
+
+function evaluationTypeLabel(type: EvaluationType): string {
+  switch (type) {
+    case "good":
+      return "良い評価";
+    case "bad":
+      return "気になる評価";
+    case "cancel":
+      return "キャンセル";
+    case "no_show":
+      return "無断キャンセル";
+  }
+}
+
+function evaluationDescription(type: EvaluationType): string {
+  switch (type) {
+    case "good":
+      return "相手から良い取引として評価されました。";
+    case "bad":
+      return "取引で気になる点があった評価です。";
+    case "cancel":
+      return "予定確定後のキャンセルによりスコアへ反映されました。";
+    case "no_show":
+      return "受け渡し未実施の報告によりスコアへ反映されました。";
+  }
+}
+
+function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString("ja-JP", {
+    month: "numeric",
+    day: "numeric",
+  });
+}
+
+function getScoreErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "信用スコアを取得できませんでした";
+  }
+
+  if (error.message.includes("タイムアウト") || error.message.includes("fetch")) {
+    return "APIに接続できません。backendが起動しているか、NEXT_PUBLIC_API_BASE_URLを確認してください。";
+  }
+
+  if (error.message.includes("ログイン") || error.message.includes("認証")) {
+    return "ログイン状態を確認してください。再ログインすると解消する場合があります。";
+  }
+
+  return error.message || "信用スコアを取得できませんでした";
 }

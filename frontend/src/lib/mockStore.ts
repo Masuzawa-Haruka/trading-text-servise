@@ -22,6 +22,17 @@ export type MockTransaction = {
   buyerEvaluated?: boolean;
 };
 
+export type MockEvaluation = {
+  id: string;
+  transactionId: string;
+  targetUserId: string;
+  reviewerId: string | null;
+  scoreChange: number;
+  type: "good" | "bad" | "cancel" | "no_show";
+  itemTitle: string | null;
+  createdAt: string;
+};
+
 export type MockMessage = {
   id: string;
   transactionId: string;
@@ -86,6 +97,29 @@ const DEFAULT_ITEMS: MockItem[] = [
     status: "available",
     sellerId: "u2",
     likes: 8,
+  },
+];
+
+const DEFAULT_EVALUATIONS: MockEvaluation[] = [
+  {
+    id: "ev1",
+    transactionId: "sample-tx-1",
+    targetUserId: "u1",
+    reviewerId: "u2",
+    scoreChange: 10,
+    type: "good",
+    itemTitle: "基礎からの線形代数",
+    createdAt: "2026-05-20T00:00:00.000Z",
+  },
+  {
+    id: "ev2",
+    transactionId: "sample-tx-2",
+    targetUserId: "u1",
+    reviewerId: null,
+    scoreChange: -10,
+    type: "cancel",
+    itemTitle: "ミクロ経済学の基礎",
+    createdAt: "2026-05-18T00:00:00.000Z",
   },
 ];
 
@@ -227,12 +261,53 @@ class MockStore {
 
     txs[index] = transaction;
     this.set("mock_transactions", txs);
+    this.addEvaluation({
+      transactionId: transaction.id,
+      targetUserId: reviewerId === transaction.sellerId ? transaction.buyerId : transaction.sellerId,
+      reviewerId,
+      scoreChange: type === "good" ? 10 : -10,
+      type,
+      itemTitle: this.getItem(transaction.itemId)?.title ?? null,
+    });
     this.addMessage(
       id,
       `【評価】${type === "good" ? "良い取引でした" : "気になる点がありました"}`,
       "system",
     );
     return transaction;
+  }
+
+  getReceivedEvaluations(userId: string): MockEvaluation[] {
+    const evaluations = this.get<MockEvaluation[]>("mock_evaluations", []);
+    if (evaluations.length === 0) {
+      this.set("mock_evaluations", DEFAULT_EVALUATIONS);
+      return DEFAULT_EVALUATIONS.filter((evaluation) => evaluation.targetUserId === userId);
+    }
+
+    return evaluations.filter((evaluation) => evaluation.targetUserId === userId);
+  }
+
+  private addEvaluation(
+    input: Omit<MockEvaluation, "id" | "createdAt">,
+  ): MockEvaluation {
+    const evaluations = this.get<MockEvaluation[]>("mock_evaluations", DEFAULT_EVALUATIONS);
+    const existing = evaluations.find(
+      (evaluation) =>
+        evaluation.transactionId === input.transactionId &&
+        evaluation.reviewerId === input.reviewerId &&
+        evaluation.targetUserId === input.targetUserId,
+    );
+    if (existing) {
+      return existing;
+    }
+
+    const evaluation: MockEvaluation = {
+      ...input,
+      id: `ev${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    this.set("mock_evaluations", [evaluation, ...evaluations]);
+    return evaluation;
   }
 
   // --- Messages ---
