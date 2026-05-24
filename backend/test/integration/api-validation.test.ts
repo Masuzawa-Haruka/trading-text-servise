@@ -7,6 +7,7 @@ import { ScheduleProposalController } from '../../src/interfaces/controllers/Sch
 import { CancellationController } from '../../src/interfaces/controllers/CancellationController';
 import { UserController } from '../../src/interfaces/controllers/UserController';
 import { ReportController } from '../../src/interfaces/controllers/ReportController';
+import { NotificationController } from '../../src/interfaces/controllers/NotificationController';
 import { ConflictError } from '../../src/domain/errors';
 
 const JWT_SECRET = 'integration-test-secret';
@@ -15,6 +16,7 @@ const TRANSACTION_ID = '22222222-2222-4222-8222-222222222222';
 const PROPOSAL_ID = '33333333-3333-4333-8333-333333333333';
 const CANDIDATE_ID = '44444444-4444-4444-8444-444444444444';
 const REPORTED_USER_ID = '55555555-5555-4555-8555-555555555555';
+const NOTIFICATION_ID = '77777777-7777-4777-8777-777777777777';
 
 let previousJwtSecret: string | undefined;
 
@@ -531,6 +533,100 @@ test('POST /api/reports maps duplicate reports to 409', async () => {
   assert.deepEqual(response.body, { error: 'この取引はすでに通報済みです' });
 });
 
+test('GET /api/notifications passes authenticated user id to usecase', async () => {
+  let capturedUserId: unknown;
+  const handler = createNotificationGetHandler({
+    execute: async (userId: string) => {
+      capturedUserId = userId;
+      return [
+        {
+          id: NOTIFICATION_ID,
+          user_id: AUTH_USER_ID,
+          actor_id: null,
+          title: '日程が確定しました',
+          type: 'info',
+          transaction_id: TRANSACTION_ID,
+          is_read: false,
+          created_at: new Date('2026-05-20T00:00:00.000Z'),
+          updated_at: new Date('2026-05-20T00:00:00.000Z'),
+        },
+      ];
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(capturedUserId, AUTH_USER_ID);
+});
+
+test('GET /api/notifications/unread-count passes authenticated user id to usecase', async () => {
+  let capturedUserId: unknown;
+  const handler = createNotificationUnreadCountHandler({
+    execute: async (userId: string) => {
+      capturedUserId = userId;
+      return { unread_count: 2 };
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, { unread_count: 2 });
+  assert.equal(capturedUserId, AUTH_USER_ID);
+});
+
+test('PATCH /api/notifications/:id/read rejects invalid notification id before usecase execution', async () => {
+  let called = false;
+  const handler = createNotificationMarkReadHandler({
+    execute: async () => {
+      called = true;
+      throw new Error('should not be called');
+    },
+  });
+
+  const response = await request(handler, {
+    params: { id: 'bad-notification-id' },
+    token: authToken(),
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(response.body, { error: '無効な通知ID形式です' });
+  assert.equal(called, false);
+});
+
+test('PATCH /api/notifications/:id/read passes authenticated user id and notification id to usecase', async () => {
+  let capturedArgs: unknown[] | null = null;
+  const handler = createNotificationMarkReadHandler({
+    execute: async (...args: unknown[]) => {
+      capturedArgs = args;
+      return {
+        id: NOTIFICATION_ID,
+        user_id: AUTH_USER_ID,
+        actor_id: null,
+        title: '日程が確定しました',
+        type: 'info',
+        transaction_id: TRANSACTION_ID,
+        is_read: true,
+        created_at: new Date('2026-05-20T00:00:00.000Z'),
+        updated_at: new Date('2026-05-20T00:00:00.000Z'),
+      };
+    },
+  });
+
+  const response = await request(handler, {
+    params: { id: NOTIFICATION_ID },
+    token: authToken(),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(capturedArgs, [AUTH_USER_ID, NOTIFICATION_ID]);
+});
+
 function createItemHandler(createItemUseCase: { execute: (...args: any[]) => Promise<unknown> }): TestHandler {
   const controller = new ItemController(
     createItemUseCase as any,
@@ -583,6 +679,42 @@ function createReportHandler(
   const controller = new ReportController(submitReportUseCase as any);
 
   return controller.submitReport.bind(controller) as unknown as TestHandler;
+}
+
+function createNotificationGetHandler(
+  getNotificationsUseCase: { execute: (...args: any[]) => Promise<unknown> },
+): TestHandler {
+  const controller = new NotificationController(
+    getNotificationsUseCase as any,
+    { execute: async () => ({ unread_count: 0 }) } as any,
+    { execute: async () => null } as any,
+  );
+
+  return controller.getNotifications.bind(controller) as unknown as TestHandler;
+}
+
+function createNotificationMarkReadHandler(
+  markNotificationReadUseCase: { execute: (...args: any[]) => Promise<unknown> },
+): TestHandler {
+  const controller = new NotificationController(
+    { execute: async () => [] } as any,
+    { execute: async () => ({ unread_count: 0 }) } as any,
+    markNotificationReadUseCase as any,
+  );
+
+  return controller.markRead.bind(controller) as unknown as TestHandler;
+}
+
+function createNotificationUnreadCountHandler(
+  getUnreadNotificationCountUseCase: { execute: (...args: any[]) => Promise<unknown> },
+): TestHandler {
+  const controller = new NotificationController(
+    { execute: async () => [] } as any,
+    getUnreadNotificationCountUseCase as any,
+    { execute: async () => null } as any,
+  );
+
+  return controller.getUnreadCount.bind(controller) as unknown as TestHandler;
 }
 
 function authToken(options: { email?: string } = {}): string {

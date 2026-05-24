@@ -6,13 +6,15 @@
  */
 import { IScheduleProposalRepository } from '../domain/repositories/IScheduleProposalRepository';
 import { ITransactionRepository } from '../domain/repositories/ITransactionRepository';
+import { INotificationRepository } from '../domain/repositories/INotificationRepository';
 import { ScheduleProposalEntity, RespondScheduleProposalInput } from '../domain/scheduleProposal';
 import { NotFoundError, ForbiddenError, ValidationError } from '../domain/errors';
 
 export class RespondScheduleProposalUseCase {
   constructor(
     private readonly scheduleProposalRepository: IScheduleProposalRepository,
-    private readonly transactionRepository: ITransactionRepository
+    private readonly transactionRepository: ITransactionRepository,
+    private readonly notificationRepository?: INotificationRepository
   ) {}
 
   async execute(
@@ -62,11 +64,19 @@ export class RespondScheduleProposalUseCase {
       }
 
       try {
-        return await this.scheduleProposalRepository.acceptProposalAtomically(
+        const acceptedProposal = await this.scheduleProposalRepository.acceptProposalAtomically(
           proposalId,
           transaction.id,
           input.candidate_id
         );
+        await this.createNotificationSafely({
+          user_id: proposal.sender_id,
+          actor_id: requesterId,
+          title: '日程が確定しました',
+          type: 'info',
+          transaction_id: transaction.id,
+        });
+        return acceptedProposal;
       } catch (error: any) {
         if (error.message === 'ALREADY_RESPONDED') {
           throw new ValidationError('この提案または候補は既に他の操作によって回答済みです');
@@ -79,7 +89,15 @@ export class RespondScheduleProposalUseCase {
     } else {
       // rejected の場合。親提案と全候補を一括で却下する。
       try {
-        return await this.scheduleProposalRepository.rejectProposalAtomically(proposalId);
+        const rejectedProposal = await this.scheduleProposalRepository.rejectProposalAtomically(proposalId);
+        await this.createNotificationSafely({
+          user_id: proposal.sender_id,
+          actor_id: requesterId,
+          title: '日程提案が見送られました',
+          type: 'action_required',
+          transaction_id: transaction.id,
+        });
+        return rejectedProposal;
       } catch (error: any) {
         if (error.message === 'ALREADY_RESPONDED') {
           throw new ValidationError('この提案は既に回答済みです');
@@ -89,6 +107,22 @@ export class RespondScheduleProposalUseCase {
         }
         throw error;
       }
+    }
+  }
+
+  private async createNotificationSafely(input: {
+    user_id: string;
+    actor_id: string;
+    title: string;
+    type: 'info' | 'action_required';
+    transaction_id: string;
+  }): Promise<void> {
+    if (!this.notificationRepository) return;
+
+    try {
+      await this.notificationRepository.create(input);
+    } catch (error) {
+      console.error('[RespondScheduleProposalUseCase.createNotification]', error);
     }
   }
 }

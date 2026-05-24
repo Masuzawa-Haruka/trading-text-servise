@@ -18,13 +18,15 @@
  */
 import { ICancellationRepository } from '../domain/repositories/ICancellationRepository';
 import { ITransactionRepository } from '../domain/repositories/ITransactionRepository';
+import { INotificationRepository } from '../domain/repositories/INotificationRepository';
 import { CancellationRequestEntity, ExecuteCancellationInput } from '../domain/cancellation';
 import { NotFoundError, ForbiddenError, ConflictError } from '../domain/errors';
 
 export class ExecuteCancellationUseCase {
   constructor(
     private readonly cancellationRepository: ICancellationRepository,
-    private readonly transactionRepository: ITransactionRepository
+    private readonly transactionRepository: ITransactionRepository,
+    private readonly notificationRepository?: INotificationRepository
   ) {}
 
   async execute(input: ExecuteCancellationInput, requesterId: string): Promise<CancellationRequestEntity> {
@@ -53,12 +55,21 @@ export class ExecuteCancellationUseCase {
     }
 
     try {
-      return await this.cancellationRepository.executeCancellationAtomically(
+      const cancellation = await this.cancellationRepository.executeCancellationAtomically(
         transaction_id,
         transaction.item_id,
         requesterId,
         reason
       );
+      const recipientId = transaction.seller_id === requesterId ? transaction.buyer_id : transaction.seller_id;
+      await this.createNotificationSafely({
+        user_id: recipientId,
+        actor_id: requesterId,
+        title: '取引がキャンセルされました',
+        type: 'info',
+        transaction_id,
+      });
+      return cancellation;
     } catch (error: any) {
       if (error.message === 'ALREADY_CANCELED') {
         throw new ConflictError('この取引はすでにキャンセル済みです');
@@ -67,6 +78,22 @@ export class ExecuteCancellationUseCase {
         throw new ConflictError('キャンセル実行は日時確定後（scheduled）の取引でのみ行えます');
       }
       throw error;
+    }
+  }
+
+  private async createNotificationSafely(input: {
+    user_id: string;
+    actor_id: string;
+    title: string;
+    type: 'info' | 'action_required';
+    transaction_id: string;
+  }): Promise<void> {
+    if (!this.notificationRepository) return;
+
+    try {
+      await this.notificationRepository.create(input);
+    } catch (error) {
+      console.error('[ExecuteCancellationUseCase.createNotification]', error);
     }
   }
 }

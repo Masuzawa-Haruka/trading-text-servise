@@ -6,13 +6,15 @@
  */
 import { IEvaluationRepository } from '../domain/repositories/IEvaluationRepository';
 import { ITransactionRepository } from '../domain/repositories/ITransactionRepository';
-import { EvaluationEntity, SubmitEvaluationInput, PendingEvaluationData } from '../domain/evaluation';
+import { INotificationRepository } from '../domain/repositories/INotificationRepository';
+import { EvaluationEntity, SubmitEvaluationInput } from '../domain/evaluation';
 import { NotFoundError, ForbiddenError, ValidationError } from '../domain/errors';
 
 export class SubmitEvaluationUseCase {
   constructor(
     private readonly evaluationRepository: IEvaluationRepository,
-    private readonly transactionRepository: ITransactionRepository
+    private readonly transactionRepository: ITransactionRepository,
+    private readonly notificationRepository?: INotificationRepository
   ) {}
 
   async execute(input: SubmitEvaluationInput, requesterId: string): Promise<EvaluationEntity> {
@@ -58,7 +60,7 @@ export class SubmitEvaluationUseCase {
     const scoreChange = type === 'good' ? 10 : -10;
 
     try {
-      return await this.evaluationRepository.submitEvaluationAtomically(
+      const evaluation = await this.evaluationRepository.submitEvaluationAtomically(
         transaction_id,
         transaction.item_id,
         requesterId,
@@ -67,11 +69,60 @@ export class SubmitEvaluationUseCase {
         type,
         scoreChange
       );
+      await this.createEvaluationNotifications(
+        transaction_id,
+        requesterId,
+        targetUserId,
+        counterpartHasEvaluated
+      );
+      return evaluation;
     } catch (error: any) {
       if (error.message === 'INVALID_TRANSITION') {
         throw new ValidationError('取引のステータスが不正なため、評価を完了できませんでした');
       }
       throw error;
+    }
+  }
+
+  private async createEvaluationNotifications(
+    transactionId: string,
+    requesterId: string,
+    targetUserId: string,
+    counterpartHasEvaluated: boolean
+  ): Promise<void> {
+    if (!this.notificationRepository) return;
+
+    const notifications = counterpartHasEvaluated
+      ? [
+          {
+            user_id: targetUserId,
+            actor_id: requesterId,
+            title: '評価が完了しました',
+            type: 'info' as const,
+            transaction_id: transactionId,
+          },
+          {
+            user_id: requesterId,
+            actor_id: targetUserId,
+            title: '評価が完了しました',
+            type: 'info' as const,
+            transaction_id: transactionId,
+          },
+        ]
+      : [
+          {
+            user_id: targetUserId,
+            actor_id: requesterId,
+            title: '取引評価を送信してください',
+            type: 'action_required' as const,
+            transaction_id: transactionId,
+          },
+        ];
+
+    try {
+      await Promise.all(notifications.map((notification) => this.notificationRepository!.create(notification)));
+    } catch (error) {
+      console.error('[SubmitEvaluationUseCase.createNotification]', error);
     }
   }
 }

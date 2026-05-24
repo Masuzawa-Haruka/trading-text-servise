@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { EvaluationController } from '../../interfaces/controllers/EvaluationController';
 import { EvaluationRepository } from '../repositories/EvaluationRepository';
 import { TransactionRepository } from '../repositories/TransactionRepository';
+import { NotificationRepository } from '../repositories/NotificationRepository';
 import { SubmitEvaluationUseCase } from '../../usecases/SubmitEvaluationUseCase';
 import { GetEvaluationsUseCase } from '../../usecases/GetEvaluationsUseCase';
 import { GetMyEvaluationsUseCase } from '../../usecases/GetMyEvaluationsUseCase';
@@ -15,8 +16,13 @@ const router = Router();
 // DI
 const evaluationRepository = new EvaluationRepository();
 const transactionRepository = new TransactionRepository();
+const notificationRepository = new NotificationRepository();
 
-const submitEvaluationUseCase = new SubmitEvaluationUseCase(evaluationRepository, transactionRepository);
+const submitEvaluationUseCase = new SubmitEvaluationUseCase(
+  evaluationRepository,
+  transactionRepository,
+  notificationRepository
+);
 const getEvaluationsUseCase = new GetEvaluationsUseCase(evaluationRepository, transactionRepository);
 const getMyEvaluationsUseCase = new GetMyEvaluationsUseCase(evaluationRepository);
 
