@@ -55,7 +55,12 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
 ```
 
-The backend also requires `SUPABASE_JWT_SECRET` so it can verify `Authorization: Bearer <JWT>` from the frontend API client.
+The backend also requires `SUPABASE_JWT_SECRET` so it can verify `Authorization: Bearer <JWT>` from the frontend API client. If your Supabase project uses JWT signing keys with an asymmetric algorithm, also set `SUPABASE_URL` so the backend can fetch the public JWKS:
+
+```bash
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_JWT_SECRET=...
+```
 
 Item image uploads use the public Supabase Storage bucket `item-images`. Apply
 `docs/migrations/20260523_create_item_images_storage_bucket.sql` to Supabase
