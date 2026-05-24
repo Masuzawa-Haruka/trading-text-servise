@@ -5,13 +5,15 @@
  */
 import { IScheduleProposalRepository } from '../domain/repositories/IScheduleProposalRepository';
 import { ITransactionRepository } from '../domain/repositories/ITransactionRepository';
+import { INotificationRepository } from '../domain/repositories/INotificationRepository';
 import { SendScheduleProposalInput } from '../domain/scheduleProposal';
 import { NotFoundError, ForbiddenError, ValidationError } from '../domain/errors';
 
 export class SendScheduleProposalUseCase {
   constructor(
     private readonly scheduleProposalRepository: IScheduleProposalRepository,
-    private readonly transactionRepository: ITransactionRepository
+    private readonly transactionRepository: ITransactionRepository,
+    private readonly notificationRepository?: INotificationRepository
   ) {}
 
   async execute(input: SendScheduleProposalInput): Promise<void> {
@@ -44,5 +46,30 @@ export class SendScheduleProposalUseCase {
       input.sender_id,
       input.candidates
     );
+
+    const recipientId = transaction.seller_id === input.sender_id ? transaction.buyer_id : transaction.seller_id;
+    await this.createNotificationSafely({
+      user_id: recipientId,
+      actor_id: input.sender_id,
+      title: '日程提案が届いています',
+      type: 'action_required',
+      transaction_id: input.transaction_id,
+    });
+  }
+
+  private async createNotificationSafely(input: {
+    user_id: string;
+    actor_id: string;
+    title: string;
+    type: 'info' | 'action_required';
+    transaction_id: string;
+  }): Promise<void> {
+    if (!this.notificationRepository) return;
+
+    try {
+      await this.notificationRepository.create(input);
+    } catch (error) {
+      console.error('[SendScheduleProposalUseCase.createNotification]', error);
+    }
   }
 }

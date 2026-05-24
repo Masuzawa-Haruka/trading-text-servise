@@ -13,6 +13,7 @@ test('MarkNotificationReadUseCase marks a user-owned notification as read', asyn
   let capturedArgs: unknown[] | null = null;
   const now = new Date('2026-05-24T00:00:00.000Z');
   const useCase = new MarkNotificationReadUseCase({
+    create: async () => assert.fail('not used'),
     findByUserId: async () => assert.fail('not used'),
     countUnreadByUserId: async () => assert.fail('not used'),
     markRead: async (...args) => {
@@ -39,6 +40,7 @@ test('MarkNotificationReadUseCase marks a user-owned notification as read', asyn
 
 test('MarkNotificationReadUseCase hides notifications that are not owned by the user', async () => {
   const useCase = new MarkNotificationReadUseCase({
+    create: async () => assert.fail('not used'),
     findByUserId: async () => assert.fail('not used'),
     countUnreadByUserId: async () => assert.fail('not used'),
     markRead: async () => null,

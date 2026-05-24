@@ -11,3 +11,11 @@ export interface NotificationEntity {
   created_at: Date;
   updated_at: Date;
 }
+
+export interface CreateNotificationInput {
+  user_id: string;
+  actor_id?: string | null;
+  title: string;
+  type: NotificationType;
+  transaction_id?: string | null;
+}

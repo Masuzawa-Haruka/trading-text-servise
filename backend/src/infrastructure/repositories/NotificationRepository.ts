@@ -1,9 +1,23 @@
 import { Notification } from '@prisma/client';
-import { NotificationEntity, NotificationType } from '../../domain/notification';
+import { CreateNotificationInput, NotificationEntity, NotificationType } from '../../domain/notification';
 import { INotificationRepository } from '../../domain/repositories/INotificationRepository';
 import { prisma } from '../../lib/prisma';
 
 export class NotificationRepository implements INotificationRepository {
+  async create(input: CreateNotificationInput): Promise<NotificationEntity> {
+    const notification = await prisma.notification.create({
+      data: {
+        user_id: input.user_id,
+        actor_id: input.actor_id ?? null,
+        title: input.title,
+        type: input.type,
+        transaction_id: input.transaction_id ?? null,
+      },
+    });
+
+    return this.toEntity(notification);
+  }
+
   async findByUserId(userId: string): Promise<NotificationEntity[]> {
     const notifications = await prisma.notification.findMany({
       where: { user_id: userId },

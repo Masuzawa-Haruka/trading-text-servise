@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { ScheduleProposalController } from '../../interfaces/controllers/ScheduleProposalController';
 import { ScheduleProposalRepository } from '../repositories/ScheduleProposalRepository';
 import { TransactionRepository } from '../repositories/TransactionRepository';
+import { NotificationRepository } from '../repositories/NotificationRepository';
 import { SendScheduleProposalUseCase } from '../../usecases/SendScheduleProposalUseCase';
 import { RespondScheduleProposalUseCase } from '../../usecases/RespondScheduleProposalUseCase';
 import { GetScheduleProposalsUseCase } from '../../usecases/GetScheduleProposalsUseCase';
@@ -15,14 +16,17 @@ const router = Router();
 // DI
 const scheduleProposalRepository = new ScheduleProposalRepository();
 const transactionRepository = new TransactionRepository();
+const notificationRepository = new NotificationRepository();
 
 const sendScheduleProposalUseCase = new SendScheduleProposalUseCase(
   scheduleProposalRepository,
-  transactionRepository
+  transactionRepository,
+  notificationRepository
 );
 const respondScheduleProposalUseCase = new RespondScheduleProposalUseCase(
   scheduleProposalRepository,
-  transactionRepository
+  transactionRepository,
+  notificationRepository
 );
 const getScheduleProposalsUseCase = new GetScheduleProposalsUseCase(
   scheduleProposalRepository,

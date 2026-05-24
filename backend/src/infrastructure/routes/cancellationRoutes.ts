@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { CancellationController } from '../../interfaces/controllers/CancellationController';
 import { CancellationRepository } from '../repositories/CancellationRepository';
 import { TransactionRepository } from '../repositories/TransactionRepository';
+import { NotificationRepository } from '../repositories/NotificationRepository';
 import { ExecuteCancellationUseCase } from '../../usecases/ExecuteCancellationUseCase';
 import { ReportNoShowUseCase } from '../../usecases/ReportNoShowUseCase';
 import { authenticateToken } from '../../middleware/auth';
@@ -11,8 +12,13 @@ const router = Router();
 // DI
 const cancellationRepository = new CancellationRepository();
 const transactionRepository = new TransactionRepository();
+const notificationRepository = new NotificationRepository();
 
-const executeCancellationUseCase = new ExecuteCancellationUseCase(cancellationRepository, transactionRepository);
+const executeCancellationUseCase = new ExecuteCancellationUseCase(
+  cancellationRepository,
+  transactionRepository,
+  notificationRepository
+);
 const reportNoShowUseCase = new ReportNoShowUseCase(cancellationRepository, transactionRepository);
 
 const controller = new CancellationController(
