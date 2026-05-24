@@ -1,7 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  getUnreadNotificationCount,
+  NOTIFICATIONS_UPDATED_EVENT,
+} from "@/lib/notifications/api";
 
 type TabItem = {
   href: string;
@@ -13,12 +18,38 @@ type TabItem = {
 const tabs: TabItem[] = [
   { href: "/", label: "探す", icon: "search" },
   { href: "/sell", label: "出品", icon: "sell" },
-  { href: "/inbox", label: "受信箱", icon: "inbox", badge: 3 },
+  { href: "/inbox", label: "受信箱", icon: "inbox" },
   { href: "/mypage", label: "マイページ", icon: "profile" },
 ];
 
 export function AppFooter() {
   const pathname = usePathname();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadUnreadCount() {
+      try {
+        const count = await getUnreadNotificationCount();
+        if (!ignore) {
+          setUnreadCount(count);
+        }
+      } catch {
+        if (!ignore) {
+          setUnreadCount(0);
+        }
+      }
+    }
+
+    void loadUnreadCount();
+    window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, loadUnreadCount);
+
+    return () => {
+      ignore = true;
+      window.removeEventListener(NOTIFICATIONS_UPDATED_EVENT, loadUnreadCount);
+    };
+  }, [pathname]);
 
   return (
     <footer className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur">
@@ -37,9 +68,9 @@ export function AppFooter() {
             >
               <span className="relative grid size-7 place-items-center">
                 <FooterIcon name={tab.icon} active={isActive} />
-                {tab.badge ? (
+                {tab.icon === "inbox" && unreadCount > 0 ? (
                   <span className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-[#0047c7] text-[9px] leading-none text-white">
-                    {tab.badge}
+                    {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 ) : null}
               </span>

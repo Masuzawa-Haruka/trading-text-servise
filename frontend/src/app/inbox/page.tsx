@@ -3,67 +3,29 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  getTransactions,
-  transactionNotificationText,
-  isTransactionClosed,
-  type Transaction,
-} from "@/lib/transactions/api";
+  getNotifications,
+  markNotificationRead,
+  notificationHref,
+  type AppNotification,
+} from "@/lib/notifications/api";
 
 // ───────────────────────────────────────────
 // 型定義
 // ───────────────────────────────────────────
 
-type TransactionNotification = {
-  id: string;
-  txId: string;
-  title: string;
-  updatedAt: string;
-  closed: boolean; // completed / canceled → 既読扱い
-  status: Transaction["status"];
-};
-
-// ───────────────────────────────────────────
-// ステータスごとのアイコン
-// ───────────────────────────────────────────
-
-function statusIcon(status: Transaction["status"]): string {
-  switch (status) {
-    case "proposing":
-      return "💬";
-    case "scheduled":
-      return "📅";
-    case "completed":
-      return "✅";
-    case "canceled":
-      return "❌";
-  }
+function notificationIcon(type: AppNotification["type"]): string {
+  return type === "action_required" ? "!" : "i";
 }
 
-function statusBadge(status: Transaction["status"]): {
+function notificationBadge(type: AppNotification["type"]): {
   label: string;
   className: string;
 } {
-  switch (status) {
-    case "proposing":
-      return {
-        label: "取引中",
-        className: "bg-blue-100 text-blue-700",
-      };
-    case "scheduled":
-      return {
-        label: "日程確定",
-        className: "bg-emerald-100 text-emerald-700",
-      };
-    case "completed":
-      return {
-        label: "完了",
-        className: "bg-slate-100 text-slate-500",
-      };
-    case "canceled":
-      return {
-        label: "キャンセル",
-        className: "bg-red-100 text-red-600",
-      };
+  switch (type) {
+    case "action_required":
+      return { label: "要対応", className: "bg-blue-100 text-blue-700" };
+    case "info":
+      return { label: "お知らせ", className: "bg-slate-100 text-slate-600" };
   }
 }
 
@@ -85,9 +47,7 @@ function formatRelativeTime(isoString: string): string {
 // ───────────────────────────────────────────
 
 export default function InboxPage() {
-  const [notifications, setNotifications] = useState<
-    TransactionNotification[]
-  >([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,27 +56,15 @@ export default function InboxPage() {
 
     async function load() {
       try {
-        const transactions = await getTransactions();
+        setIsLoading(true);
+        setError(null);
+        const loadedNotifications = await getNotifications();
 
         if (!isMounted) return;
-
-        // [4] N+1解消: item_title はバックエンドJOINで取得済み（本物API）
-        //             またはmockStoreから同期取得済み（Mock Auth）
-        const notes: TransactionNotification[] = transactions.map((tx) => ({
-          id: `tx_${tx.id}`,
-          txId: tx.id,
-          title: transactionNotificationText(tx.status, tx.item_title),
-          updatedAt: tx.updated_at,
-          closed: isTransactionClosed(tx.status),
-          status: tx.status,
-        }));
-
-        setNotifications(notes);
+        setNotifications(loadedNotifications);
       } catch (err) {
         if (!isMounted) return;
-        setError(
-          err instanceof Error ? err.message : "取引一覧の取得に失敗しました"
-        );
+        setError(getInboxErrorMessage(err));
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -128,6 +76,25 @@ export default function InboxPage() {
       isMounted = false;
     };
   }, []);
+
+  function handleNotificationClick(notification: AppNotification) {
+    if (notification.is_read) return;
+
+    setNotifications((current) =>
+      current.map((item) =>
+        item.id === notification.id
+          ? { ...item, is_read: true, updated_at: new Date().toISOString() }
+          : item,
+      ),
+    );
+    void markNotificationRead(notification.id).catch(() => {
+      setNotifications((current) =>
+        current.map((item) =>
+          item.id === notification.id ? { ...item, is_read: false } : item,
+        ),
+      );
+    });
+  }
 
   return (
     <main className="mx-auto min-h-dvh max-w-[430px] bg-white pb-24">
@@ -145,23 +112,24 @@ export default function InboxPage() {
         </div>
       ) : notifications.length === 0 ? (
         <div className="py-16 text-center text-sm text-slate-500">
-          取引の通知はありません
+          通知はありません
         </div>
       ) : (
         <section className="divide-y divide-slate-100">
-          {notifications.map((note) => {
-            const badge = statusBadge(note.status);
+          {notifications.map((notification) => {
+            const badge = notificationBadge(notification.type);
             return (
               <Link
-                key={note.id}
-                href={`/transactions/${note.txId}`}
+                key={notification.id}
+                href={notificationHref(notification)}
+                onClick={() => handleNotificationClick(notification)}
                 className={`flex gap-3 px-4 py-4 transition-colors hover:bg-slate-50 ${
-                  note.closed ? "bg-white" : "bg-blue-50/40"
+                  notification.is_read ? "bg-white" : "bg-blue-50/40"
                 }`}
               >
                 {/* アイコン */}
-                <div className="grid size-10 shrink-0 place-items-center rounded-full bg-slate-100 text-lg">
-                  {statusIcon(note.status)}
+                <div className="grid size-10 shrink-0 place-items-center rounded-full bg-slate-100 text-sm font-black text-slate-700">
+                  {notificationIcon(notification.type)}
                 </div>
 
                 {/* 本文 */}
@@ -174,15 +142,15 @@ export default function InboxPage() {
                     </span>
                   </div>
                   <p className="text-sm font-bold leading-snug text-slate-900">
-                    {note.title}
+                    {notification.title}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {formatRelativeTime(note.updatedAt)}
+                    {formatRelativeTime(notification.created_at)}
                   </p>
                 </div>
 
                 {/* 未読ドット */}
-                {!note.closed && (
+                {!notification.is_read && (
                   <div className="mt-2 size-2.5 shrink-0 rounded-full bg-blue-600" />
                 )}
               </Link>
@@ -192,4 +160,20 @@ export default function InboxPage() {
       )}
     </main>
   );
+}
+
+function getInboxErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "通知一覧の取得に失敗しました";
+  }
+
+  if (error.message.includes("タイムアウト") || error.message.includes("fetch")) {
+    return "APIに接続できません。backendが起動しているか、NEXT_PUBLIC_API_BASE_URLを確認してください。";
+  }
+
+  if (error.message.includes("ログイン") || error.message.includes("認証")) {
+    return "ログイン状態を確認してください。再ログインすると解消する場合があります。";
+  }
+
+  return error.message || "通知一覧の取得に失敗しました";
 }
