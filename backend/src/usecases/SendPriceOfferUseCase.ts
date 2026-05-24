@@ -11,6 +11,7 @@
  */
 import { IPriceOfferRepository } from '../domain/repositories/IPriceOfferRepository';
 import { ITransactionRepository } from '../domain/repositories/ITransactionRepository';
+import { INotificationRepository } from '../domain/repositories/INotificationRepository';
 import { PriceOfferEntity, SendPriceOfferInput } from '../domain/priceOffer';
 import { NotFoundError, ForbiddenError, ValidationError } from '../domain/errors';
 
@@ -18,6 +19,7 @@ export class SendPriceOfferUseCase {
   constructor(
     private readonly priceOfferRepository: IPriceOfferRepository,
     private readonly transactionRepository: ITransactionRepository,
+    private readonly notificationRepository?: INotificationRepository,
   ) {}
 
   /**
@@ -54,7 +56,17 @@ export class SendPriceOfferUseCase {
 
     // 並行オファーや回数上限のチェックと作成を原子的に行う
     try {
-      return await this.priceOfferRepository.createAtomically(input);
+      const offer = await this.priceOfferRepository.createAtomically(input);
+      const recipientId =
+        transaction.seller_id === input.sender_id ? transaction.buyer_id : transaction.seller_id;
+      await this.createNotificationSafely({
+        user_id: recipientId,
+        actor_id: input.sender_id,
+        title: '価格提案が届いています',
+        type: 'action_required',
+        transaction_id: input.transaction_id,
+      });
+      return offer;
     } catch (error: any) {
       if (error.message === 'PENDING_EXISTS') {
         throw new ForbiddenError(
@@ -65,6 +77,22 @@ export class SendPriceOfferUseCase {
         throw new ForbiddenError('この取引での価格交渉回数の上限（3回）に達しました');
       }
       throw error;
+    }
+  }
+
+  private async createNotificationSafely(input: {
+    user_id: string;
+    actor_id: string;
+    title: string;
+    type: 'info' | 'action_required';
+    transaction_id: string;
+  }): Promise<void> {
+    if (!this.notificationRepository) return;
+
+    try {
+      await this.notificationRepository.create(input);
+    } catch (error) {
+      console.error('[SendPriceOfferUseCase.createNotification]', error);
     }
   }
 }
