@@ -18,6 +18,8 @@ export type MockTransaction = {
   buyerId: string;
   status: "proposing" | "scheduled" | "completed" | "canceled";
   finalPrice?: number;
+  sellerEvaluated?: boolean;
+  buyerEvaluated?: boolean;
 };
 
 export type MockMessage = {
@@ -190,6 +192,47 @@ class MockStore {
       txs[index].finalPrice = price;
       this.set("mock_transactions", txs);
     }
+  }
+
+  submitEvaluation(id: string, reviewerId: string, type: "good" | "bad"): MockTransaction {
+    const txs = this.getTransactions();
+    const index = txs.findIndex((t) => t.id === id);
+    if (index < 0) {
+      throw new Error("取引が見つかりません");
+    }
+
+    const transaction = txs[index];
+    if (transaction.status !== "scheduled") {
+      throw new Error("評価は日時確定後の取引でのみ行えます");
+    }
+
+    if (reviewerId === transaction.sellerId) {
+      if (transaction.sellerEvaluated) {
+        throw new Error("既にこの取引の評価を完了しています");
+      }
+      transaction.sellerEvaluated = true;
+    } else if (reviewerId === transaction.buyerId) {
+      if (transaction.buyerEvaluated) {
+        throw new Error("既にこの取引の評価を完了しています");
+      }
+      transaction.buyerEvaluated = true;
+    } else {
+      throw new Error("この取引の評価を行う権限がありません");
+    }
+
+    if (transaction.sellerEvaluated && transaction.buyerEvaluated) {
+      transaction.status = "completed";
+      this.updateItemStatus(transaction.itemId, "completed");
+    }
+
+    txs[index] = transaction;
+    this.set("mock_transactions", txs);
+    this.addMessage(
+      id,
+      `【評価】${type === "good" ? "良い取引でした" : "気になる点がありました"}`,
+      "system",
+    );
+    return transaction;
   }
 
   // --- Messages ---

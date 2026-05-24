@@ -15,7 +15,9 @@ import {
   respondScheduleProposal,
   sendScheduleProposal,
   sendTransactionMessage,
+  submitEvaluation,
   updateTransaction,
+  type EvaluationType,
   type ScheduleProposal,
   type Transaction,
   type TransactionMessage,
@@ -52,7 +54,9 @@ export default function TransactionPage() {
   const [showMenu, setShowMenu] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showEvaluationModal, setShowEvaluationModal] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [evaluationType, setEvaluationType] = useState<EvaluationType>("good");
   const [selectedArea, setSelectedArea] = useState("");
   const [candidates, setCandidates] = useState<Candidate[]>([
     { date: "", time: "", locationId: "" },
@@ -120,6 +124,12 @@ export default function TransactionPage() {
   const canChat = transaction?.status === "scheduled";
   const isClosed = transaction?.status === "completed" || transaction?.status === "canceled";
   const isSeller = Boolean(transaction && currentUserId && transaction.seller_id === currentUserId);
+  const hasEvaluated = Boolean(
+    transaction && currentUserId && (isSeller ? transaction.seller_evaluated : transaction.buyer_evaluated),
+  );
+  const counterpartHasEvaluated = Boolean(
+    transaction && currentUserId && (isSeller ? transaction.buyer_evaluated : transaction.seller_evaluated),
+  );
   const partnerLabel = isSeller ? "購入希望者" : "出品者";
 
   async function handleSend() {
@@ -174,15 +184,12 @@ export default function TransactionPage() {
         setError("日程確定後に取引完了できます");
         return;
       }
-      setIsSubmitting(true);
-      try {
-        await updateTransaction(transaction.id, { status: "completed" });
-        await loadData();
-      } catch (actionError) {
-        setError(actionError instanceof Error ? actionError.message : "取引完了に失敗しました");
-      } finally {
-        setIsSubmitting(false);
+      if (hasEvaluated) {
+        setError("あなたの評価は送信済みです。相手の評価が完了すると取引が完了します");
+        return;
       }
+      setEvaluationType("good");
+      setShowEvaluationModal(true);
       return;
     }
 
@@ -204,6 +211,22 @@ export default function TransactionPage() {
       await loadData();
     } catch (cancelError) {
       setError(cancelError instanceof Error ? cancelError.message : "キャンセル実行に失敗しました");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function submitTransactionEvaluation() {
+    if (!transaction || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await submitEvaluation(transaction, evaluationType);
+      setShowEvaluationModal(false);
+      await loadData();
+    } catch (evaluationError) {
+      setError(evaluationError instanceof Error ? evaluationError.message : "評価の送信に失敗しました");
     } finally {
       setIsSubmitting(false);
     }
@@ -322,6 +345,44 @@ export default function TransactionPage() {
           </div>
         )}
 
+        {(transaction.status === "scheduled" || transaction.status === "completed") && (
+          <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-bold text-slate-900">取引評価</div>
+                <div className="mt-1 text-xs leading-relaxed text-slate-500">
+                  {transaction.status === "completed"
+                    ? "双方の評価が完了しました。信用スコアに反映されています。"
+                    : hasEvaluated
+                      ? "あなたの評価は送信済みです。相手の評価が完了すると取引完了になります。"
+                      : "受け渡しが終わったら、相手を評価して取引完了に進めます。"}
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
+                {transaction.status === "completed"
+                  ? "完了"
+                  : hasEvaluated
+                    ? counterpartHasEvaluated
+                      ? "反映中"
+                      : "相手待ち"
+                    : "未評価"}
+              </span>
+            </div>
+            {transaction.status === "scheduled" && !hasEvaluated && (
+              <button
+                onClick={() => {
+                  setEvaluationType("good");
+                  setShowEvaluationModal(true);
+                }}
+                disabled={isSubmitting}
+                className="mt-3 w-full rounded-full bg-[#0047c7] py-2.5 text-xs font-bold text-white shadow-sm disabled:opacity-50"
+              >
+                評価して完了へ進む
+              </button>
+            )}
+          </div>
+        )}
+
         {pendingProposals.map((proposal) => {
           const isMine = proposal.sender_id === currentUserId || (MOCK_AUTH_ENABLED && currentUserId === MOCK_USER_ID);
           return (
@@ -390,7 +451,7 @@ export default function TransactionPage() {
             <ActionButton label="日程提案" icon="📅" onClick={() => handleAction("schedule")} />
             <ActionButton label="価格交渉" icon="¥" onClick={() => handleAction("price")} />
             <ActionButton label="キャンセル" icon="✕" onClick={() => handleAction("cancel")} />
-            <ActionButton label="完了" icon="✓" onClick={() => handleAction("evaluate")} />
+            <ActionButton label={hasEvaluated ? "評価済み" : "完了"} icon="✓" onClick={() => handleAction("evaluate")} />
           </div>
         </div>
       )}
@@ -625,6 +686,79 @@ export default function TransactionPage() {
                 className="flex-1 rounded-full bg-red-600 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50"
               >
                 キャンセルする
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEvaluationModal && (
+        <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/40">
+          <div className="w-full max-w-[430px] rounded-t-2xl bg-white">
+            <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <h2 className="text-sm font-bold text-slate-900">取引を評価して完了</h2>
+              <button
+                onClick={() => setShowEvaluationModal(false)}
+                className="text-2xl leading-none text-slate-400"
+                disabled={isSubmitting}
+              >
+                &times;
+              </button>
+            </header>
+
+            <div className="space-y-4 p-4">
+              {error && (
+                <div className="rounded-lg bg-red-50 p-3 text-xs font-bold text-red-700">
+                  {error}
+                </div>
+              )}
+
+              <div className="rounded-lg bg-blue-50 p-3 text-xs font-bold leading-relaxed text-blue-900">
+                評価は相手にはすぐ公開されません。双方の評価が揃うと取引が完了し、信用スコアへ反映されます。
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setEvaluationType("good")}
+                  disabled={isSubmitting}
+                  className={`rounded-lg border p-4 text-left transition-colors disabled:opacity-50 ${
+                    evaluationType === "good"
+                      ? "border-[#0047c7] bg-blue-50 text-[#0047c7]"
+                      : "border-slate-200 bg-white text-slate-700"
+                  }`}
+                >
+                  <div className="text-sm font-black">良かった</div>
+                  <div className="mt-1 text-xs leading-relaxed">時間通りで安心して取引できた</div>
+                </button>
+                <button
+                  onClick={() => setEvaluationType("bad")}
+                  disabled={isSubmitting}
+                  className={`rounded-lg border p-4 text-left transition-colors disabled:opacity-50 ${
+                    evaluationType === "bad"
+                      ? "border-red-500 bg-red-50 text-red-700"
+                      : "border-slate-200 bg-white text-slate-700"
+                  }`}
+                >
+                  <div className="text-sm font-black">気になる点あり</div>
+                  <div className="mt-1 text-xs leading-relaxed">遅刻や連絡不足などがあった</div>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-2 border-t border-slate-100 p-4">
+              <button
+                onClick={() => setShowEvaluationModal(false)}
+                disabled={isSubmitting}
+                className="flex-1 rounded-full bg-slate-100 py-3 text-sm font-bold text-slate-700 disabled:opacity-50"
+              >
+                戻る
+              </button>
+              <button
+                onClick={submitTransactionEvaluation}
+                disabled={isSubmitting}
+                className="flex-1 rounded-full bg-[#0047c7] py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50"
+              >
+                評価を送信
               </button>
             </div>
           </div>
