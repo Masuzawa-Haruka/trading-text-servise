@@ -19,11 +19,11 @@
 
 ## 技術スタック
 
-- Frontend: Next.js / TypeScript
-- Backend: Node.js / Express / TypeScript
-- Database: PostgreSQL / Supabase
-- ORM: Prisma
-- Storage: Supabase Storage
+- Frontend: Next.js 16.2.5 / React 19.2.4
+- Backend: Express 5.2.1 / TypeScript
+- ORM: Prisma 7.8.0
+- Database: Supabase PostgreSQL 17.6
+- Auth / Storage / RLS: Supabase, @supabase/supabase-js 2.105.3
 
 ## 開発環境の起動
 
