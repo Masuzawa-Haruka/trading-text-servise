@@ -1,180 +1,263 @@
-## テーブル定義（updated_at 追加版）
+# データベース定義
 
-（※下書き：必要な箇所に `updated_at` を追加し、上と同じ形式で表にしました）
+最終更新: 2026-05-26  
+参照元: `backend/prisma/schema.prisma` / `docs/supabase_schema.sql`
 
-### 1. Users（ユーザーテーブル）
+## Enum
 
-阪大生アカウントと信用スコアを管理します。
+| Enum | 値 | 用途 |
+| --- | --- | --- |
+| `UserStatus` | `active`, `warning`, `suspended` | ユーザー状態 |
+| `ItemStatus` | `available`, `matching`, `completed`, `canceled` | 出品状態 |
+| `ItemCondition` | `new`, `used_good`, `used_bad` | 参考書の状態 |
+| `Campus` | `toyonaka`, `suita`, `minoh` | キャンパス |
+| `TransactionStatus` | `proposing`, `scheduled`, `completed`, `canceled` | 取引状態 |
+| `ProposalStatus` | `pending`, `accepted`, `rejected` | 日程提案・候補の状態 |
+| `CancellationStatus` | `pending`, `accepted`, `rejected` | キャンセル履歴の互換状態 |
+| `OfferStatus` | `pending`, `accepted`, `rejected` | 価格オファー状態 |
+| `EvaluationType` | `good`, `bad`, `cancel`, `no_show` | 評価・ペナルティ種別 |
+| `NotificationType` | `action_required`, `info` | 通知種別 |
 
-| カラム名 | 型 | 制約 / デフォルト | 説明 |
-| --- | --- | --- | --- |
-| `id` | UUID | PK | ユーザーID |
-| `email` | String | Unique | 大学メールアドレス（登録制限に使用） |
-| `nickname` | String | Not Null | アプリ内での表示名 |
-| `profile_image_url` | String | Nullable | アイコン等のプロフィール画像URL |
-| `credit_score` | Int | Default: 100（上限150） | 信用スコア |
-| `status` | Enum | Default: 'active' | active(通常), warning(警告), suspended(停止) |
-| `created_at` | DateTime |  | アカウント作成日時 |
-| `updated_at` | DateTime |  | アカウント更新日時 |
+## 1. users
 
-### 2. Items（出品・参考書テーブル）
-
-教科書の情報と、現在の募集状態を管理します。削除時は `status` を `canceled` に変更して対応します。
-
-| カラム名 | 型 | 制約 / デフォルト | 説明 |
-| --- | --- | --- | --- |
-| `id` | UUID | PK | 出品アイテムID |
-| `seller_id` | UUID | FK (Users) | 出品者のユーザーID |
-| `title` | String | Not Null | 参考書のタイトル |
-| `author` | String | Nullable | 著者名（モックUI拡張用） |
-| `description` | Text | Nullable | 商品の詳細説明（書き込み有無など） |
-| `condition` | Enum | Not Null | new(新品), used_good(目立った傷なし), used_bad(傷や書き込みあり) |
-| `category` | String | Nullable | 科目・カテゴリ（検索用） |
-| `price` | Int | Default: 0 | 価格（0円推奨） |
-| `status` | Enum | Default: 'available' | available(募集中), matching(マッチング中・他者遮断), completed(取引完了), canceled(出品取消) |
-| `created_at` | DateTime |  | 出品日時 |
-| `updated_at` | DateTime |  | 出品情報の更新日時 |
-
-### 2.1 Item_Images（参考書画像テーブル）
-
-1つの出品に対して最大5枚までの画像を保存し、表示順を管理します。
+阪大生アカウント、プロフィール、信用スコアを管理します。
 
 | カラム名 | 型 | 制約 / デフォルト | 説明 |
 | --- | --- | --- | --- |
-| `id` | UUID | PK | 画像ID |
-| `item_id` | UUID | FK (Items, Cascade) | 紐づく参考書ID |
-| `image_url` | String | Not Null | 画像のURL |
-| `display_order` | Int | Default: 0 | 表示順（0がメイン画像/先頭） |
-| `created_at` | DateTime | | 登録日時 |
+| `id` | UUID | PK, default `gen_random_uuid()` | ユーザーID |
+| `email` | VARCHAR | Unique, Not Null | 大学メールアドレス |
+| `nickname` | VARCHAR | Not Null | アプリ内での表示名 |
+| `profile_image_url` | VARCHAR | Nullable | プロフィール画像URL |
+| `credit_score` | INT | Default: `100` | 信用スコア |
+| `status` | `UserStatus` | Default: `active` | ユーザー状態 |
+| `created_at` | TIMESTAMPTZ | Default: `now()` | 作成日時 |
+| `updated_at` | TIMESTAMPTZ | Default: `now()` / Prisma `@updatedAt` | 更新日時 |
 
+補足:
 
-### 3. Transactions（取引・マッチングテーブル）★最重要
+- Supabase SQLでは `email` に `@ecs.osaka-u.ac.jp` ドメイン制約があります。
 
-取引の状態を中央で管理します。マッチング成立時は日時未定のため、日時は `Nullable` にしています。
+## 2. items
 
-| カラム名 | 型 | 制約 / デフォルト | 説明 |
-| --- | --- | --- | --- |
-| `id` | UUID | PK | 取引ID |
-| `item_id` | UUID | FK (Items) | 対象の参考書ID |
-| `seller_id` | UUID | FK (Users) | 出品者のID |
-| `buyer_id` | UUID | FK (Users) | 購入者（受け取り側）のID |
-| `final_price` | Int | Nullable | 取引成立時点の価格スナップショット |
-| `status` | Enum | Default: 'proposing' | proposing(日程提案中), scheduled(日時確定/ボード解放), completed(完了), canceled(中止) |
-| `meeting_datetime` | DateTime | Nullable | 確定した待ち合わせ日時（提案承認後にUPDATE） |
-| `meeting_place` | String | Nullable | 確定した待ち合わせ場所（提案承認後にUPDATE） |
-| `seller_evaluated` | Boolean | Default: false | 出品者が評価を済ませたか（ダブルブラインド用） |
-| `buyer_evaluated` | Boolean | Default: false | 購入者が評価を済ませたか（ダブルブラインド用） |
-| `created_at` | DateTime |  | マッチング成立日時 |
-| `updated_at` | DateTime |  | ステータス等の更新日時 |
-
-### 4. Schedule_Proposals（日程調整提案テーブル）
-
-日程調整提案の親レコードです。送信者や現在のステータスを管理します。
+出品された参考書・教科書の情報を管理します。
 
 | カラム名 | 型 | 制約 / デフォルト | 説明 |
 | --- | --- | --- | --- |
-| `id` | UUID | PK | 提案ID |
-| `transaction_id` | UUID | FK (Transactions) | 紐づく取引ID |
-| `sender_id` | UUID | FK (Users) | 提案を送信したユーザーID |
-| `status` | Enum | Default: 'pending' | pending(未回答), accepted(承認), rejected(拒否) |
-| `created_at` | DateTime |  | 提案の送信日時 |
-| `updated_at` | DateTime |  | 承認状態等の更新日時 |
+| `id` | UUID | PK, default `gen_random_uuid()` | 出品ID |
+| `seller_id` | UUID | FK `users.id`, Not Null | 出品者ID |
+| `title` | VARCHAR | Not Null | 参考書タイトル |
+| `author` | VARCHAR | Nullable | 著者名 |
+| `description` | TEXT | Nullable | 商品説明 |
+| `condition` | `ItemCondition` | Default: `new` | 商品状態 |
+| `campus` | `Campus` | Default: `toyonaka`, Not Null | 受け渡しキャンパス |
+| `handoff_location` | VARCHAR | Nullable | 受け渡し場所の補足 |
+| `category` | VARCHAR | Nullable | 科目・カテゴリ |
+| `price` | INT | Default: `0` | 価格 |
+| `status` | `ItemStatus` | Default: `available` | 出品状態 |
+| `created_at` | TIMESTAMPTZ | Default: `now()` | 作成日時 |
+| `updated_at` | TIMESTAMPTZ | Default: `now()` / Prisma `@updatedAt` | 更新日時 |
 
-### 4.1 Schedule_Candidates（日程調整候補テーブル）
+## 3. item_images
 
-1つの提案に対して最大5つまで提示される日時のスロット候補です。
-
-| カラム名 | 型 | 制約 / デフォルト | 説明 |
-| --- | --- | --- | --- |
-| `id` | UUID | PK | 候補ID |
-| `proposal_id` | UUID | FK (Schedule_Proposals, Cascade) | 紐づく親提案ID |
-| `proposed_datetime` | DateTime | Not Null | 候補の日時 |
-| `proposed_place` | String | Not Null | 候補の場所（将来的に location_spot_id FK へ移行予定） |
-| `status` | Enum | Default: 'pending' | pending(未回答), accepted(承認), rejected(拒否) |
-| `created_at` | DateTime |  | 候補の作成日時 |
-| `updated_at` | DateTime |  | 状態更新日時 |
-
-
-### 4. Price_Offers（価格交渉オファーテーブル）
-
-Take it or Leave it 方式の価格交渉を管理します。1取引あたり最大3回まで価格提案が可能です。
+1つの出品に紐づく画像を管理します。表示順 `0` がメイン画像です。
 
 | カラム名 | 型 | 制約 / デフォルト | 説明 |
 | --- | --- | --- | --- |
-| `id` | UUID | PK | オファーID |
-| `transaction_id` | UUID | FK (Transactions) | 紐づく取引ID |
-| `sender_id` | UUID | FK (Users) | オファーを送信したユーザーID |
-| `price` | Int | Not Null | 提案価格（0円可） |
-| `status` | Enum | Default: 'pending' | pending(未回答), accepted(承認), rejected(辞退) |
-| `offer_count` | Int | Not Null | 何回目のオファーか（1〜3）。3回目は受信側に承認/辞退の2択のみ表示 |
-| `created_at` | DateTime |  | オファー送信日時 |
-| `updated_at` | DateTime |  | ステータス更新日時 |
+| `id` | UUID | PK, default `gen_random_uuid()` | 画像ID |
+| `item_id` | UUID | FK `items.id`, Cascade, Not Null | 出品ID |
+| `image_url` | VARCHAR | Not Null | 画像URL |
+| `display_order` | INT | Default: `0`, Not Null | 表示順 |
+| `created_at` | TIMESTAMPTZ | Default: `now()` | 作成日時 |
 
-### 5. Messages（取引連絡ボードテーブル）
+## 4. transactions
 
-日時が確定した（`Transactions.status == 'scheduled'`）後のみ、書き込み・表示を許可するテーブルです。
+マッチング成立後の取引状態を管理します。
 
-| カラム名 | 型 | 制約 | 説明 |
+| カラム名 | 型 | 制約 / デフォルト | 説明 |
 | --- | --- | --- | --- |
-| `id` | UUID | PK | メッセージID |
-| `transaction_id` | UUID | FK (Transactions) | 紐づく取引ID |
-| `sender_id` | UUID | FK (Users) | 送信者のユーザーID |
-| `content` | Text | Not Null | メッセージ内容 |
-| `created_at` | DateTime |  | 送信日時 |
-| `updated_at` | DateTime |  | メッセージの更新日時（編集機能を付けない場合は不要でも可） |
+| `id` | UUID | PK, default `gen_random_uuid()` | 取引ID |
+| `item_id` | UUID | FK `items.id`, Not Null | 対象の出品ID |
+| `seller_id` | UUID | FK `users.id`, Not Null | 出品者ID |
+| `buyer_id` | UUID | FK `users.id`, Not Null | 受取者ID |
+| `final_price` | INT | Nullable | 承認された最終価格 |
+| `status` | `TransactionStatus` | Default: `proposing` | 取引状態 |
+| `meeting_datetime` | TIMESTAMPTZ | Nullable | 確定した待ち合わせ日時 |
+| `meeting_place` | VARCHAR | Nullable | 確定した待ち合わせ場所 |
+| `seller_evaluated` | BOOLEAN | Default: `false` | 出品者が評価済みか |
+| `buyer_evaluated` | BOOLEAN | Default: `false` | 受取者が評価済みか |
+| `created_at` | TIMESTAMPTZ | Default: `now()` | 作成日時 |
+| `updated_at` | TIMESTAMPTZ | Default: `now()` / Prisma `@updatedAt` | 更新日時 |
 
-### 6. Evaluations（相互評価・ペナルティログテーブル）
+## 5. schedule_proposals
 
-スコアの増減履歴を保存します。現在のスコア自体は `Users.credit_score` を更新しますが、ログとしてここに記録を残します。
+日程調整提案の親レコードです。
 
-| カラム名 | 型 | 制約 | 説明 |
+| カラム名 | 型 | 制約 / デフォルト | 説明 |
 | --- | --- | --- | --- |
-| `id` | UUID | PK | 評価・ペナルティID |
-| `transaction_id` | UUID | FK (Transactions) | 紐づく取引ID |
-| `target_user_id` | UUID | FK (Users) | 点数を増減される対象のユーザーID |
-| `reviewer_id` | UUID / Null | FK (Users) | 評価を付けたユーザーID（システムペナルティ時はNull） |
-| `score_change` | Int | Not Null | +10, -10, -30 など |
-| `type` | Enum | Not Null | good(+10), bad(-10), cancel(-10), no_show(-30:ドタキャン) |
-| `created_at` | DateTime |  | 評価・ペナルティ発生日時 |
-| `updated_at` | DateTime |  | 更新日時 |
+| `id` | UUID | PK, default `gen_random_uuid()` | 提案ID |
+| `transaction_id` | UUID | FK `transactions.id`, Not Null | 取引ID |
+| `sender_id` | UUID | FK `users.id`, Not Null | 提案送信者ID |
+| `status` | `ProposalStatus` | Default: `pending` | 提案状態 |
+| `created_at` | TIMESTAMPTZ | Default: `now()` | 作成日時 |
+| `updated_at` | TIMESTAMPTZ | Default: `now()` / Prisma `@updatedAt` | 更新日時 |
 
-### 7. Notifications（通知・受信箱テーブル）
+## 6. schedule_candidates
 
-取引の進行状況や、フォームが届いたことなどをユーザーに知らせます。
+1つの提案に対して提示される日時・場所候補です。
 
-| カラム名 | 型 | 制約 | 説明 |
+| カラム名 | 型 | 制約 / デフォルト | 説明 |
 | --- | --- | --- | --- |
-| `id` | UUID | PK | 通知ID |
-| `user_id` | UUID | FK (Users) | 通知を受け取るユーザーID |
-| `actor_id` | UUID | FK (Users) / Nullable | 通知を引き起こしたユーザーID（システム通知時はNull） |
-| `title` | String | Not Null | 通知タイトル（例：「日程の提案が届きました」） |
-| `type` | Enum | Not Null | action_required(要対応), info(お知らせ)など |
-| `transaction_id` | UUID | Nullable | タップした時に該当の取引画面へ飛ばすためのID |
-| `is_read` | Boolean | Default: false | 既読フラグ |
-| `created_at` | DateTime |  | 通知発生日時 |
-| `updated_at` | DateTime |  | 既読フラグ等の更新日時 |
+| `id` | UUID | PK, default `gen_random_uuid()` | 候補ID |
+| `proposal_id` | UUID | FK `schedule_proposals.id`, Cascade, Not Null | 親提案ID |
+| `proposed_datetime` | TIMESTAMPTZ | Not Null | 候補日時 |
+| `proposed_place` | VARCHAR | Not Null | 候補場所 |
+| `status` | `ProposalStatus` | Default: `pending` | 候補状態 |
+| `created_at` | TIMESTAMPTZ | Default: `now()` | 作成日時 |
+| `updated_at` | TIMESTAMPTZ | Default: `now()` / Prisma `@updatedAt` | 更新日時 |
 
-### 8. Location_Areas（場所マスター：エリアテーブル）
+補足:
+
+- `proposed_place` は将来的に `location_spot_id` FKへ移行予定です。
+
+## 7. price_offers
+
+Take it or Leave it 方式の価格交渉オファーを管理します。
+
+| カラム名 | 型 | 制約 / デフォルト | 説明 |
+| --- | --- | --- | --- |
+| `id` | UUID | PK, default `gen_random_uuid()` | オファーID |
+| `transaction_id` | UUID | FK `transactions.id`, Not Null | 取引ID |
+| `sender_id` | UUID | FK `users.id`, Not Null | オファー送信者ID |
+| `price` | INT | Not Null, Check `price >= 0` | 提案価格 |
+| `status` | `OfferStatus` | Default: `pending` | オファー状態 |
+| `offer_count` | INT | Not Null, Check `1..3` | 何回目のオファーか |
+| `created_at` | TIMESTAMPTZ | Default: `now()` | 作成日時 |
+| `updated_at` | TIMESTAMPTZ | Default: `now()` / Prisma `@updatedAt` | 更新日時 |
+
+## 8. messages
+
+日時・場所確定後の取引連絡ボードのメッセージを管理します。
+
+| カラム名 | 型 | 制約 / デフォルト | 説明 |
+| --- | --- | --- | --- |
+| `id` | UUID | PK, default `gen_random_uuid()` | メッセージID |
+| `transaction_id` | UUID | FK `transactions.id`, Not Null | 取引ID |
+| `sender_id` | UUID | FK `users.id`, Not Null | 送信者ID |
+| `content` | TEXT | Not Null | メッセージ本文 |
+| `created_at` | TIMESTAMPTZ | Default: `now()` | 作成日時 |
+| `updated_at` | TIMESTAMPTZ | Default: `now()` / Prisma `@updatedAt` | 更新日時 |
+
+## 9. evaluations
+
+相互評価とペナルティログを管理します。
+
+| カラム名 | 型 | 制約 / デフォルト | 説明 |
+| --- | --- | --- | --- |
+| `id` | UUID | PK, default `gen_random_uuid()` | 評価ID |
+| `transaction_id` | UUID | FK `transactions.id`, Not Null | 取引ID |
+| `target_user_id` | UUID | FK `users.id`, Not Null | スコア変動対象ユーザーID |
+| `reviewer_id` | UUID | FK `users.id`, Nullable | 評価者ID。システムペナルティ時はNull |
+| `score_change` | INT | Not Null | スコア変動値 |
+| `type` | `EvaluationType` | Not Null | 評価・ペナルティ種別 |
+| `created_at` | TIMESTAMPTZ | Default: `now()` | 作成日時 |
+| `updated_at` | TIMESTAMPTZ | Default: `now()` / Prisma `@updatedAt` | 更新日時 |
+
+## 10. reports
+
+取引に紐づく通報を管理します。
+
+| カラム名 | 型 | 制約 / デフォルト | 説明 |
+| --- | --- | --- | --- |
+| `id` | UUID | PK, default `gen_random_uuid()` | 通報ID |
+| `transaction_id` | UUID | FK `transactions.id`, Cascade, Not Null | 取引ID |
+| `reporter_id` | UUID | FK `users.id`, Cascade, Not Null | 通報者ID |
+| `reported_user_id` | UUID | FK `users.id`, Cascade, Not Null | 通報対象ユーザーID |
+| `reason` | VARCHAR | Not Null | 通報理由 |
+| `detail` | TEXT | Not Null | 通報詳細 |
+| `evidence_image_urls` | TEXT[] | Default: `[]`, max 5 | 証拠画像URL |
+| `created_at` | TIMESTAMPTZ | Default: `now()` | 作成日時 |
+| `updated_at` | TIMESTAMPTZ | Default: `now()` / Prisma `@updatedAt` | 更新日時 |
+
+制約:
+
+- `reporter_id <> reported_user_id`
+- Unique: `(transaction_id, reporter_id)`
+- `evidence_image_urls` は最大5件
+
+## 11. notifications
+
+取引の進行状況やフォーム受信などをユーザーへ知らせる通知を管理します。
+
+| カラム名 | 型 | 制約 / デフォルト | 説明 |
+| --- | --- | --- | --- |
+| `id` | UUID | PK, default `gen_random_uuid()` | 通知ID |
+| `user_id` | UUID | FK `users.id`, Not Null | 通知を受け取るユーザーID |
+| `actor_id` | UUID | FK `users.id`, Nullable | 通知を発生させたユーザーID |
+| `title` | VARCHAR | Not Null | 通知タイトル |
+| `type` | `NotificationType` | Not Null | 通知種別 |
+| `transaction_id` | UUID | Nullable | 関連する取引ID |
+| `is_read` | BOOLEAN | Default: `false` | 既読フラグ |
+| `created_at` | TIMESTAMPTZ | Default: `now()` | 作成日時 |
+| `updated_at` | TIMESTAMPTZ | Default: `now()` / Prisma `@updatedAt` | 更新日時 |
+
+補足:
+
+- Prisma schema上の `transaction_id` は現在relationを持たないUUIDです。
+
+## 12. cancellation_requests
+
+即時キャンセルの履歴を管理します。現状は旧キャンセル申請フローとの互換名を残しています。
+
+| カラム名 | 型 | 制約 / デフォルト | 説明 |
+| --- | --- | --- | --- |
+| `id` | UUID | PK, default `gen_random_uuid()` | キャンセル履歴ID |
+| `transaction_id` | UUID | FK `transactions.id`, Unique, Not Null | 取引ID |
+| `requester_id` | UUID | FK `users.id`, Not Null | キャンセル実行者ID |
+| `reason` | TEXT | Nullable | キャンセル理由 |
+| `status` | `CancellationStatus` | Default: `pending` | 互換用ステータス |
+| `created_at` | TIMESTAMPTZ | Default: `now()` | 作成日時 |
+| `updated_at` | TIMESTAMPTZ | Default: `now()` / Prisma `@updatedAt` | 更新日時 |
+
+補足:
+
+- 新しい即時キャンセルでは、実行済み履歴として `accepted` を利用します。
+- バックエンドのキャンセルAPIが安定した後、`cancellation_events` または `cancellations` へリネーム予定です。
+
+## 13. location_areas
 
 キャンパス単位で待ち合わせスポットを束ねるエリアマスターです。
 
 | カラム名 | 型 | 制約 / デフォルト | 説明 |
 | --- | --- | --- | --- |
-| `id` | UUID | PK | エリアID |
-| `campus` | String | Not Null | キャンパス名（"豊中" \| "吹田" \| "箕面"） |
-| `name` | String | Not Null | エリア名称（例: "豊中キャンパス北部"） |
-| `created_at` | DateTime | | 登録日時 |
-| `updated_at` | DateTime | | 更新日時 |
+| `id` | UUID | PK, default `gen_random_uuid()` | エリアID |
+| `campus` | VARCHAR | Not Null | キャンパス名 |
+| `name` | VARCHAR | Not Null | エリア名称 |
+| `created_at` | TIMESTAMPTZ | Default: `now()` | 作成日時 |
+| `updated_at` | TIMESTAMPTZ | Default: `now()` / Prisma `@updatedAt` | 更新日時 |
 
-### 9. Location_Spots（場所マスター：スポットテーブル）
+## 14. location_spots
 
-エリア内の具体的な待ち合わせスポットマスターです。
+エリア内の具体的な待ち合わせスポットを管理します。
 
 | カラム名 | 型 | 制約 / デフォルト | 説明 |
 | --- | --- | --- | --- |
-| `id` | UUID | PK | スポットID |
-| `area_id` | UUID | FK (Location_Areas, Cascade) | 紐づくエリアID |
-| `name` | String | Not Null | 具体的な待ち合わせポイント（例: "図書館前 時計台"） |
-| `reference_image_url` | String | Nullable | すれ違い防止用の参考画像URL |
-| `created_at` | DateTime | | 登録日時 |
-| `updated_at` | DateTime | | 更新日時 |
+| `id` | UUID | PK, default `gen_random_uuid()` | スポットID |
+| `area_id` | UUID | FK `location_areas.id`, Cascade, Not Null | エリアID |
+| `name` | VARCHAR | Not Null | スポット名 |
+| `reference_image_url` | VARCHAR | Nullable | すれ違い防止用の参考画像URL |
+| `created_at` | TIMESTAMPTZ | Default: `now()` | 作成日時 |
+| `updated_at` | TIMESTAMPTZ | Default: `now()` / Prisma `@updatedAt` | 更新日時 |
+
+## Storage Buckets
+
+| Bucket | 用途 | 補足 |
+| --- | --- | --- |
+| `item-images` | 出品画像 | 1出品最大5枚 |
+| `profile-images` | プロフィール画像 | ユーザー自身のフォルダ配下のみ更新・削除可能 |
+| `report-evidence` | 通報証拠画像 | 1通報最大5枚 |
+
+## 関連資料
+
+- ER図: `docs/database-er-latest.png`
+- Supabase SQL: `docs/supabase_schema.sql`
+- Prisma schema: `backend/prisma/schema.prisma`

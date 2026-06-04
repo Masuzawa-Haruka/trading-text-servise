@@ -1,5 +1,14 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## 5. 仕様書・状態遷移の設計資料
+
+MVP仕様書、DB設計、ER図を設計資料として整理しました。
+
+- MVP仕様書: `docs/spec.md`
+- DB定義: `docs/databese.md`
+- ER図: `docs/database-er-latest.png`
+
+
 ## Getting Started
 
 First, run the development server:
