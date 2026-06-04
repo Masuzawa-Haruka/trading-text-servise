@@ -258,6 +258,6 @@ Take it or Leave it 方式の価格交渉オファーを管理します。
 
 ## 関連資料
 
-- ER図: `docs/database-er-latest.png`
+- ER図: `marmaid.md`
 - Supabase SQL: `docs/supabase_schema.sql`
 - Prisma schema: `backend/prisma/schema.prisma`

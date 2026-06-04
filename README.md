@@ -6,7 +6,7 @@ MVP仕様書、DB設計、ER図を設計資料として整理しました。
 
 - MVP仕様書: `docs/spec.md`
 - DB定義: `docs/databese.md`
-- ER図: `docs/database-er-latest.png`
+- ER図: `marmaid.md`
 
 
 ## Getting Started

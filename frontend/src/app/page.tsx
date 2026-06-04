@@ -83,6 +83,7 @@ export default function Home() {
     getItems(apiParams)
       .then((data) => {
         if (!isMounted) return;
+        setError(null);
         setItems(data);
       })
       .catch((err) => {
@@ -239,7 +240,7 @@ function FilterSelect<T extends string>({
 }: {
   label: string;
   value: T;
-  onChange: (value: string) => void;
+  onChange: (value: T) => void;
   options: readonly { value: T; label: string }[];
 }) {
   return (
@@ -247,7 +248,7 @@ function FilterSelect<T extends string>({
       <span className="text-[11px] font-bold text-slate-500">{label}</span>
       <select
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => onChange(event.target.value as T)}
         className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none transition-colors focus:border-blue-500"
       >
         {options.map((option) => (
