@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { MOCK_AUTH_ENABLED, MOCK_USER_ID } from "@/lib/auth/mock";
 import { getItem, type Item } from "@/lib/items/api";
-import { mockStore, type MockLocation } from "@/lib/mockStore";
+import { getLocationOptions, type LocationOption } from "@/lib/locations/api";
+import { mockStore } from "@/lib/mockStore";
 import {
   getPriceOffers,
   respondPriceOffer,
@@ -31,7 +31,8 @@ import {
 type Candidate = {
   date: string;
   time: string;
-  area: string;
+  campus: string;
+  areaId: string;
   locationId: string;
 };
 
@@ -79,7 +80,7 @@ export default function TransactionPage() {
   const [proposals, setProposals] = useState<ScheduleProposal[]>([]);
   const [priceOffers, setPriceOffers] = useState<PriceOffer[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [locations, setLocations] = useState<MockLocation[]>([]);
+  const [locations, setLocations] = useState<LocationOption[]>([]);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -93,7 +94,7 @@ export default function TransactionPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [evaluationType, setEvaluationType] = useState<EvaluationType>("good");
   const [candidates, setCandidates] = useState<Candidate[]>([
-    { date: "", time: "", area: "", locationId: "" },
+    { date: "", time: "", campus: "", areaId: "", locationId: "" },
   ]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -109,13 +110,13 @@ export default function TransactionPage() {
       } = await supabase.auth.getUser();
       const userId = MOCK_AUTH_ENABLED ? mockStore.currentUser.id : user?.id ?? null;
       setCurrentUserId(userId);
-      setLocations(mockStore.getLocations());
 
       const nextTransaction = await getTransaction(transactionId);
-      const [nextItem, nextProposals, nextPriceOffers] = await Promise.all([
+      const [nextItem, nextProposals, nextPriceOffers, nextLocations] = await Promise.all([
         getItem(nextTransaction.item_id),
         getScheduleProposals(nextTransaction.id).catch(() => []),
         getPriceOffers(nextTransaction.id).catch(() => []),
+        getLocationOptions().catch(() => []),
       ]);
 
       const nextMessages =
@@ -127,6 +128,7 @@ export default function TransactionPage() {
       setItem(nextItem);
       setProposals(nextProposals);
       setPriceOffers(nextPriceOffers);
+      setLocations(nextLocations);
       setMessages(nextMessages);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "取引情報の取得に失敗しました");
@@ -149,17 +151,23 @@ export default function TransactionPage() {
     }
   }, [messages]);
 
-  const areas = useMemo(
-    () => Array.from(new Set(locations.map((location) => location.area))),
+  const campuses = useMemo(
+    () => Array.from(new Set(locations.map((location) => location.campus))),
     [locations],
   );
-  const locationsByArea = useMemo(
+  const areasByCampus = useMemo(
     () =>
-      areas.map((area) => ({
-        area,
-        locations: locations.filter((location) => location.area === area),
+      campuses.map((campus) => ({
+        campus,
+        areas: Array.from(
+          new Map(
+            locations
+              .filter((location) => location.campus === campus)
+              .map((location) => [location.areaId, { id: location.areaId, name: location.areaName }]),
+          ).values(),
+        ),
       })),
-    [areas, locations],
+    [campuses, locations],
   );
 
   const pendingProposals = proposals.filter((proposal) => proposal.status === "pending");
@@ -363,7 +371,7 @@ export default function TransactionPage() {
 
   function addCandidate() {
     if (candidates.length >= 5) return;
-    setCandidates([...candidates, { date: "", time: "", area: "", locationId: "" }]);
+    setCandidates([...candidates, { date: "", time: "", campus: "", areaId: "", locationId: "" }]);
   }
 
   function updateCandidate(index: number, field: keyof Candidate, value: string) {
@@ -372,9 +380,15 @@ export default function TransactionPage() {
     setCandidates(nextCandidates);
   }
 
-  function updateCandidateArea(index: number, area: string) {
+  function updateCandidateCampus(index: number, campus: string) {
     const nextCandidates = [...candidates];
-    nextCandidates[index] = { ...nextCandidates[index], area, locationId: "" };
+    nextCandidates[index] = { ...nextCandidates[index], campus, areaId: "", locationId: "" };
+    setCandidates(nextCandidates);
+  }
+
+  function updateCandidateArea(index: number, areaId: string) {
+    const nextCandidates = [...candidates];
+    nextCandidates[index] = { ...nextCandidates[index], areaId, locationId: "" };
     setCandidates(nextCandidates);
   }
 
@@ -386,7 +400,7 @@ export default function TransactionPage() {
         if (!candidate.date || !candidate.time || !location) return null;
         return {
           proposed_datetime: new Date(`${candidate.date}T${candidate.time}:00+09:00`).toISOString(),
-          proposed_place: `${location.area} - ${location.name}`,
+          proposed_place: `${location.campus} - ${location.areaName} - ${location.name}`,
         };
       })
       .filter((candidate): candidate is { proposed_datetime: string; proposed_place: string } =>
@@ -406,7 +420,7 @@ export default function TransactionPage() {
         candidates: validCandidates,
       });
       setShowScheduleModal(false);
-      setCandidates([{ date: "", time: "", area: "", locationId: "" }]);
+      setCandidates([{ date: "", time: "", campus: "", areaId: "", locationId: "" }]);
       await loadData();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "日程提案の送信に失敗しました");
@@ -847,7 +861,9 @@ export default function TransactionPage() {
 
               {candidates.map((candidate, index) => {
                 const selectedLocation = locations.find((loc) => loc.id === candidate.locationId);
-                const areaLocations = locationsByArea.find((group) => group.area === candidate.area)?.locations ?? [];
+                const candidateAreas =
+                  areasByCampus.find((group) => group.campus === candidate.campus)?.areas ?? [];
+                const areaLocations = locations.filter((location) => location.areaId === candidate.areaId);
                 return (
                   <div key={index} className="relative rounded-lg border border-slate-200 bg-slate-50 p-3">
                     {candidates.length > 1 && (
@@ -890,14 +906,29 @@ export default function TransactionPage() {
                     <div className="mb-3">
                       <label className="mb-1 block text-xs font-bold text-slate-500">キャンパス</label>
                       <select
-                        value={candidate.area}
-                        onChange={(event) => updateCandidateArea(index, event.target.value)}
+                        value={candidate.campus}
+                        onChange={(event) => updateCandidateCampus(index, event.target.value)}
                         className="mb-2 w-full rounded border border-slate-300 bg-white p-1.5 text-sm"
                       >
                         <option value="">キャンパスを選択</option>
-                        {areas.map((area) => (
-                          <option key={area} value={area}>
-                            {area}
+                        {campuses.map((campus) => (
+                          <option key={campus} value={campus}>
+                            {campus}
+                          </option>
+                        ))}
+                      </select>
+
+                      <label className="mb-1 block text-xs font-bold text-slate-500">エリア</label>
+                      <select
+                        value={candidate.areaId}
+                        onChange={(event) => updateCandidateArea(index, event.target.value)}
+                        disabled={!candidate.campus}
+                        className="mb-2 w-full rounded border border-slate-300 bg-white p-1.5 text-sm disabled:bg-slate-100 disabled:text-slate-400"
+                      >
+                        <option value="">エリアを選択</option>
+                        {candidateAreas.map((area) => (
+                          <option key={area.id} value={area.id}>
+                            {area.name}
                           </option>
                         ))}
                       </select>
@@ -906,7 +937,7 @@ export default function TransactionPage() {
                       <select
                         value={candidate.locationId}
                         onChange={(event) => updateCandidate(index, "locationId", event.target.value)}
-                        disabled={!candidate.area}
+                        disabled={!candidate.areaId}
                         className="w-full rounded border border-slate-300 bg-white p-1.5 text-sm disabled:bg-slate-100 disabled:text-slate-400"
                       >
                         <option value="">スポットを選択</option>
@@ -920,13 +951,18 @@ export default function TransactionPage() {
 
                     {selectedLocation && (
                       <div className="mt-2 flex overflow-hidden rounded border border-slate-200 bg-white">
-                        <Image
-                          src={selectedLocation.imageUrl}
-                          alt={selectedLocation.name}
-                          width={96}
-                          height={64}
-                          className="h-16 w-24 bg-slate-200 object-cover"
-                        />
+                        {selectedLocation.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={selectedLocation.imageUrl}
+                            alt={selectedLocation.name}
+                            className="h-16 w-24 bg-slate-200 object-cover"
+                          />
+                        ) : (
+                          <div className="grid h-16 w-24 shrink-0 place-items-center bg-slate-200 text-[10px] font-bold text-slate-500">
+                            No Image
+                          </div>
+                        )}
                         <div className="flex items-center p-2 text-xs leading-tight text-slate-600">
                           この周辺で待ち合わせします。目印を確認してください。
                         </div>

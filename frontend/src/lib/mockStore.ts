@@ -48,26 +48,6 @@ export type MockUser = {
   creditScore: number;
 };
 
-export type MockLocation = {
-  id: string;
-  area: string;
-  name: string;
-  imageUrl: string;
-};
-
-export const MOCK_LOCATIONS: MockLocation[] = [
-  { id: "l1", area: "豊中キャンパス", name: "総合図書館前（入口）", imageUrl: "https://placehold.co/400x300/e2e8f0/64748b?text=Toyonaka+Library" },
-  { id: "l2", area: "豊中キャンパス", name: "福利会館（生協・食堂）前", imageUrl: "https://placehold.co/400x300/e2e8f0/64748b?text=Fukuri+Kaikan" },
-  { id: "l3", area: "豊中キャンパス", name: "メインストリート", imageUrl: "https://placehold.co/400x300/e2e8f0/64748b?text=Main+Street" },
-  { id: "l4", area: "吹田キャンパス", name: "理工学図書館前", imageUrl: "https://placehold.co/400x300/e2e8f0/64748b?text=Suita+Library" },
-  { id: "l5", area: "吹田キャンパス", name: "本部前", imageUrl: "https://placehold.co/400x300/e2e8f0/64748b?text=Honbu" },
-  { id: "l6", area: "吹田キャンパス", name: "センテラス前", imageUrl: "https://placehold.co/400x300/e2e8f0/64748b?text=Centerace" },
-  { id: "l7", area: "箕面キャンパス", name: "キャンパス広場前", imageUrl: "https://placehold.co/400x300/e2e8f0/64748b?text=Minoh+Square" },
-  { id: "l8", area: "キャンパス周辺・駅", name: "石橋阪大前駅（西口改札）", imageUrl: "https://placehold.co/400x300/e2e8f0/64748b?text=Ishibashi+Station" },
-  { id: "l9", area: "キャンパス周辺・駅", name: "柴原阪大前駅（改札）", imageUrl: "https://placehold.co/400x300/e2e8f0/64748b?text=Shibahara+Station" },
-  { id: "l10", area: "キャンパス周辺・駅", name: "北千里駅", imageUrl: "https://placehold.co/400x300/e2e8f0/64748b?text=Kita-Senri+Station" },
-];
-
 const DEFAULT_USERS: MockUser[] = [
   { id: "u1", nickname: "阪大 太郎 (あなた)", creditScore: 100 },
   { id: "u2", nickname: "テスト出品者", creditScore: 120 },
@@ -144,11 +124,6 @@ class MockStore {
 
   getUser(id: string) {
     return DEFAULT_USERS.find((u) => u.id === id) || DEFAULT_USERS[1];
-  }
-
-  // --- Locations ---
-  getLocations(): MockLocation[] {
-    return MOCK_LOCATIONS;
   }
 
   // --- Items ---
