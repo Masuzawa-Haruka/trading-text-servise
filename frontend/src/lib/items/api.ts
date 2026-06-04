@@ -40,6 +40,8 @@ export type GetItemsParams = {
   campus?: Campus;
   category?: string;
   condition?: ItemCondition;
+  min_price?: number;
+  max_price?: number;
   status?: ItemStatus;
 };
 
@@ -64,7 +66,7 @@ export async function getItems(params: GetItemsParams = {}): Promise<Item[]> {
 
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== "") {
-      searchParams.set(key, value);
+      searchParams.set(key, String(value));
     }
   });
 
@@ -213,6 +215,8 @@ function getMockItems(params: GetItemsParams): Item[] {
     if (params.campus && item.campus !== params.campus) return false;
     if (params.condition && item.condition !== params.condition) return false;
     if (params.category && !item.category?.includes(params.category)) return false;
+    if (params.min_price !== undefined && item.price < params.min_price) return false;
+    if (params.max_price !== undefined && item.price > params.max_price) return false;
     if (!normalizedQuery) return true;
 
     return [item.title, item.author, item.description, item.category]

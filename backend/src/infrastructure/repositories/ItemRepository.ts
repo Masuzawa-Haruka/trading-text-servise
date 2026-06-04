@@ -80,7 +80,7 @@ export class ItemRepository implements IItemRepository {
   }
 
   /**
-   * フィルタ条件（カテゴリ・コンディション・ステータス）に合う出品一覧を取得する。
+   * フィルタ条件（カテゴリ・キャンパス・コンディション・価格帯・ステータス）に合う出品一覧を取得する。
    * status の指定がない場合は、公開中（available）のみを返す。
    * 並び順は作成日時の降順（新着順）。画像は display_order 昇順で取得する。
    */
@@ -100,6 +100,16 @@ export class ItemRepository implements IItemRepository {
         ...(filter.category ? { category: { contains: filter.category, mode: 'insensitive' as const } } : {}),
         ...(filter.campus ? { campus: filter.campus } : {}),
         ...(filter.condition ? { condition: filter.condition } : {}),
+        ...(
+          filter.min_price !== undefined || filter.max_price !== undefined
+            ? {
+                price: {
+                  ...(filter.min_price !== undefined ? { gte: filter.min_price } : {}),
+                  ...(filter.max_price !== undefined ? { lte: filter.max_price } : {}),
+                },
+              }
+            : {}
+        ),
         ...(filter.status ? { status: filter.status } : { status: 'available' }),
       },
       include: { images: { orderBy: { display_order: 'asc' } } },

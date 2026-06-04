@@ -34,7 +34,7 @@ export class ItemController {
 
   /**
    * GET /api/items
-   * クエリパラメータ（q, category, condition, status）でフィルタした出品一覧を返す。
+   * クエリパラメータ（q, category, campus, condition, min_price, max_price, status）でフィルタした出品一覧を返す。
    * 認証不要（公開エンドポイント）。
    * 想定外の値のクエリパラメータは無視してフィルタ未指定として扱う（ホワイトリスト検証）。
    */
@@ -43,8 +43,12 @@ export class ItemController {
       const rawCategory = req.query.category;
       const rawCampus = req.query.campus;
       const rawCondition = req.query.condition;
+      const rawMinPrice = req.query.min_price;
+      const rawMaxPrice = req.query.max_price;
       const rawStatus = req.query.status;
       const rawQ = req.query.q;
+      const minPrice = normalizePriceQuery(rawMinPrice);
+      const maxPrice = normalizePriceQuery(rawMaxPrice);
 
       const filter: GetItemsFilter = {
         // 文字列かつホワイトリスト内の値のみ受け付ける
@@ -58,6 +62,8 @@ export class ItemController {
           typeof rawCondition === 'string' && VALID_ITEM_CONDITIONS.includes(rawCondition as ItemCondition)
             ? (rawCondition as ItemCondition)
             : undefined,
+        min_price: minPrice,
+        max_price: maxPrice,
         status:
           typeof rawStatus === 'string' && VALID_ITEM_STATUSES.includes(rawStatus as ItemStatus)
             ? (rawStatus as ItemStatus)
@@ -278,4 +284,22 @@ function normalizeQueryString(value: unknown): string | undefined {
 
   const trimmed = value.trim();
   return trimmed === '' ? undefined : trimmed;
+}
+
+function normalizePriceQuery(value: unknown): number | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > INT32_MAX || String(parsed) !== trimmed) {
+    return undefined;
+  }
+
+  return parsed;
 }
