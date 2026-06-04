@@ -73,5 +73,7 @@ export interface GetItemsFilter {
   campus?: Campus;
   category?: string;
   condition?: ItemCondition;
+  min_price?: number;
+  max_price?: number;
   status?: ItemStatus;
 }

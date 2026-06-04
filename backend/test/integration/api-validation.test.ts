@@ -186,6 +186,69 @@ test('POST /api/items trims optional strings and image URLs before create usecas
   });
 });
 
+test('GET /api/items passes normalized search filters to usecase', async () => {
+  let capturedFilter: unknown;
+  const handler = createGetItemsHandler({
+    execute: async (filter: unknown) => {
+      capturedFilter = filter;
+      return [];
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+    query: {
+      q: ' 線形代数 ',
+      category: ' 理学部 ',
+      campus: 'toyonaka',
+      condition: 'used_good',
+      min_price: '0',
+      max_price: '500',
+      status: 'available',
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(capturedFilter, {
+    q: '線形代数',
+    category: '理学部',
+    campus: 'toyonaka',
+    condition: 'used_good',
+    min_price: 0,
+    max_price: 500,
+    status: 'available',
+  });
+});
+
+test('GET /api/items ignores invalid price filters before usecase execution', async () => {
+  let capturedFilter: unknown;
+  const handler = createGetItemsHandler({
+    execute: async (filter: unknown) => {
+      capturedFilter = filter;
+      return [];
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+    query: {
+      min_price: '-1',
+      max_price: '500.5',
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(capturedFilter, {
+    q: undefined,
+    category: undefined,
+    campus: undefined,
+    condition: undefined,
+    min_price: undefined,
+    max_price: undefined,
+    status: undefined,
+  });
+});
+
 test('PATCH /api/schedule-proposals/:id/respond rejects invalid accepted candidate_id before usecase execution', async () => {
   let called = false;
   const handler = createScheduleProposalHandler({
@@ -638,6 +701,17 @@ function createItemHandler(createItemUseCase: { execute: (...args: any[]) => Pro
   return controller.createItem as unknown as TestHandler;
 }
 
+function createGetItemsHandler(getItemsUseCase: { execute: (...args: any[]) => Promise<unknown> }): TestHandler {
+  const controller = new ItemController(
+    { execute: async () => null } as any,
+    getItemsUseCase as any,
+    { execute: async () => null } as any,
+    { execute: async () => null } as any,
+  );
+
+  return controller.getItems as unknown as TestHandler;
+}
+
 function createScheduleProposalHandler(
   respondScheduleProposalUseCase: { execute: (...args: any[]) => Promise<unknown> },
 ): TestHandler {
@@ -744,6 +818,7 @@ async function request(
     token?: string;
     body?: unknown;
     params?: Record<string, string>;
+    query?: Record<string, string>;
   },
 ): Promise<{ status: number; body: unknown }> {
   const req = {
@@ -752,6 +827,7 @@ async function request(
     },
     body: options.body,
     params: options.params ?? {},
+    query: options.query ?? {},
   } as AuthRequest;
   const res = createMockResponse();
 

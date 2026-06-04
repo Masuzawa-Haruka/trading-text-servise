@@ -2,37 +2,88 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { campusLabel, conditionLabel, getItems, type Item } from "@/lib/items/api";
+import {
+  campusLabel,
+  conditionLabel,
+  getItems,
+  type Campus,
+  type Item,
+  type ItemCondition,
+} from "@/lib/items/api";
 
-const CATEGORY_FILTERS = ["すべて", "0円のみ", "理学部", "工学部", "文学部"];
+const FACULTY_OPTIONS = [
+  { value: "", label: "すべての学部" },
+  { value: "文学部", label: "文学部" },
+  { value: "人間科学部", label: "人間科学部" },
+  { value: "外国語学部", label: "外国語学部" },
+  { value: "法学部", label: "法学部" },
+  { value: "経済学部", label: "経済学部" },
+  { value: "理学部", label: "理学部" },
+  { value: "医学部", label: "医学部" },
+  { value: "歯学部", label: "歯学部" },
+  { value: "薬学部", label: "薬学部" },
+  { value: "工学部", label: "工学部" },
+  { value: "基礎工学部", label: "基礎工学部" },
+];
+
+const CAMPUS_OPTIONS: { value: "" | Campus; label: string }[] = [
+  { value: "", label: "すべてのキャンパス" },
+  { value: "toyonaka", label: "豊中" },
+  { value: "suita", label: "吹田" },
+  { value: "minoh", label: "箕面" },
+];
+
+const CONDITION_OPTIONS: { value: "" | ItemCondition; label: string }[] = [
+  { value: "", label: "すべての状態" },
+  { value: "new", label: "新品" },
+  { value: "used_good", label: "傷少なめ" },
+  { value: "used_bad", label: "傷あり" },
+];
+
+const PRICE_RANGE_OPTIONS = [
+  { value: "all", label: "すべての価格" },
+  { value: "free", label: "0円" },
+  { value: "under500", label: "500円以下" },
+  { value: "500to1000", label: "501〜1,000円" },
+  { value: "over1000", label: "1,001円以上" },
+] as const;
+
+type PriceRange = (typeof PRICE_RANGE_OPTIONS)[number]["value"];
 
 export default function Home() {
   const [items, setItems] = useState<Item[]>([]);
   const [query, setQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("すべて");
+  const [selectedFaculty, setSelectedFaculty] = useState("");
+  const [selectedCampus, setSelectedCampus] = useState<"" | Campus>("");
+  const [selectedCondition, setSelectedCondition] = useState<"" | ItemCondition>("");
+  const [selectedPriceRange, setSelectedPriceRange] = useState<PriceRange>("all");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const apiParams = useMemo(() => {
+    const priceRange = priceRangeToParams(selectedPriceRange);
+
     return {
-      request: {
-        q: query.trim() || undefined,
-        category:
-          selectedCategory !== "すべて" && selectedCategory !== "0円のみ"
-            ? selectedCategory
-            : undefined,
-      },
-      onlyFree: selectedCategory === "0円のみ",
+      q: query.trim() || undefined,
+      category: selectedFaculty || undefined,
+      campus: selectedCampus || undefined,
+      condition: selectedCondition || undefined,
+      min_price: priceRange.min_price,
+      max_price: priceRange.max_price,
     };
-  }, [query, selectedCategory]);
+  }, [query, selectedCampus, selectedCondition, selectedFaculty, selectedPriceRange]);
+
+  const hasActiveFilters = Boolean(
+    query.trim() || selectedFaculty || selectedCampus || selectedCondition || selectedPriceRange !== "all",
+  );
 
   useEffect(() => {
     let isMounted = true;
 
-    getItems(apiParams.request)
+    getItems(apiParams)
       .then((data) => {
         if (!isMounted) return;
-        setItems(apiParams.onlyFree ? data.filter((item) => item.price === 0) : data);
+        setItems(data);
       })
       .catch((err) => {
         if (!isMounted) return;
@@ -50,6 +101,16 @@ export default function Home() {
     };
   }, [apiParams]);
 
+  function resetFilters() {
+    setIsLoading(true);
+    setQuery("");
+    setSelectedFaculty("");
+    setSelectedCampus("");
+    setSelectedCondition("");
+    setSelectedPriceRange("all");
+    setError(null);
+  }
+
   return (
     <main className="mx-auto min-h-dvh max-w-[430px] bg-white">
       <header className="sticky top-0 z-10 border-b border-slate-100 bg-white px-4 pb-3 pt-4">
@@ -60,32 +121,61 @@ export default function Home() {
           <input
             value={query}
             onChange={(event) => {
-              setQuery(event.target.value);
               setIsLoading(true);
+              setQuery(event.target.value);
               setError(null);
             }}
             placeholder="参考書名・科目・出版社で検索"
             className="min-w-0 flex-1 bg-transparent text-slate-900 outline-none placeholder:text-slate-500"
           />
         </label>
-        <div className="mt-3 flex gap-2 overflow-x-auto [scrollbar-width:none]">
-          {CATEGORY_FILTERS.map((category) => (
-            <button
-              key={category}
-              type="button"
-              onClick={() => {
-                setSelectedCategory(category);
-                setIsLoading(true);
-                setError(null);
-              }}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold ${
-                selectedCategory === category ? "bg-[#0047c7] text-white" : "bg-slate-100 text-slate-700"
-              }`}
-            >
-              {category}
-            </button>
-          ))}
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <FilterSelect
+            label="学部"
+            value={selectedFaculty}
+            onChange={(value) => {
+              setIsLoading(true);
+              setSelectedFaculty(value);
+            }}
+            options={FACULTY_OPTIONS}
+          />
+          <FilterSelect
+            label="キャンパス"
+            value={selectedCampus}
+            onChange={(value) => {
+              setIsLoading(true);
+              setSelectedCampus(value as "" | Campus);
+            }}
+            options={CAMPUS_OPTIONS}
+          />
+          <FilterSelect
+            label="状態"
+            value={selectedCondition}
+            onChange={(value) => {
+              setIsLoading(true);
+              setSelectedCondition(value as "" | ItemCondition);
+            }}
+            options={CONDITION_OPTIONS}
+          />
+          <FilterSelect
+            label="価格帯"
+            value={selectedPriceRange}
+            onChange={(value) => {
+              setIsLoading(true);
+              setSelectedPriceRange(value as PriceRange);
+            }}
+            options={PRICE_RANGE_OPTIONS}
+          />
         </div>
+        {hasActiveFilters ? (
+          <div className="mt-3 flex items-center justify-between text-xs">
+            <span className="font-bold text-slate-500">{isLoading ? "検索中..." : `${items.length}件ヒット`}</span>
+            <button type="button" onClick={resetFilters} className="font-bold text-blue-700">
+              条件をクリア
+            </button>
+          </div>
+        ) : null}
       </header>
 
       <section className="px-4 py-3 pb-24">
@@ -127,7 +217,9 @@ export default function Home() {
           ))}
 
           {!isLoading && items.length === 0 && (
-            <div className="py-10 text-center text-sm text-slate-500">出品されている参考書がありません</div>
+            <div className="py-10 text-center text-sm text-slate-500">
+              {hasActiveFilters ? "条件に合う参考書がありません" : "出品されている参考書がありません"}
+            </div>
           )}
         </div>
 
@@ -137,6 +229,50 @@ export default function Home() {
       </section>
     </main>
   );
+}
+
+function FilterSelect<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: T;
+  onChange: (value: string) => void;
+  options: readonly { value: T; label: string }[];
+}) {
+  return (
+    <label className="flex min-w-0 flex-col gap-1">
+      <span className="text-[11px] font-bold text-slate-500">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none transition-colors focus:border-blue-500"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function priceRangeToParams(range: PriceRange): { min_price?: number; max_price?: number } {
+  switch (range) {
+    case "free":
+      return { min_price: 0, max_price: 0 };
+    case "under500":
+      return { max_price: 500 };
+    case "500to1000":
+      return { min_price: 501, max_price: 1000 };
+    case "over1000":
+      return { min_price: 1001 };
+    case "all":
+      return {};
+  }
 }
 
 function BookCover({ item }: { item: Item }) {
