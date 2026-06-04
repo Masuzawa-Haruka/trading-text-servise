@@ -8,6 +8,7 @@ import { CancellationController } from '../../src/interfaces/controllers/Cancell
 import { UserController } from '../../src/interfaces/controllers/UserController';
 import { ReportController } from '../../src/interfaces/controllers/ReportController';
 import { NotificationController } from '../../src/interfaces/controllers/NotificationController';
+import { LocationController } from '../../src/interfaces/controllers/LocationController';
 import { ConflictError } from '../../src/domain/errors';
 
 const JWT_SECRET = 'integration-test-secret';
@@ -690,6 +691,60 @@ test('PATCH /api/notifications/:id/read passes authenticated user id and notific
   assert.deepEqual(capturedArgs, [AUTH_USER_ID, NOTIFICATION_ID]);
 });
 
+test('GET /api/locations returns location master data for authenticated users', async () => {
+  let called = false;
+  const handler = createLocationGetHandler({
+    execute: async () => {
+      called = true;
+      return [
+        {
+          id: '11111111-1111-4111-8111-111111111101',
+          campus: '豊中キャンパス',
+          name: '図書館・共通教育エリア',
+          spots: [
+            {
+              id: '11111111-1111-4111-8111-111111111201',
+              area_id: '11111111-1111-4111-8111-111111111101',
+              name: '総合図書館前（入口）',
+              reference_image_url: 'https://example.com/location.jpg',
+              created_at: new Date('2026-05-20T00:00:00.000Z'),
+              updated_at: new Date('2026-05-20T00:00:00.000Z'),
+            },
+          ],
+          created_at: new Date('2026-05-20T00:00:00.000Z'),
+          updated_at: new Date('2026-05-20T00:00:00.000Z'),
+        },
+      ];
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(called, true);
+  assert.deepEqual(response.body, [
+    {
+      id: '11111111-1111-4111-8111-111111111101',
+      campus: '豊中キャンパス',
+      name: '図書館・共通教育エリア',
+      spots: [
+        {
+          id: '11111111-1111-4111-8111-111111111201',
+          area_id: '11111111-1111-4111-8111-111111111101',
+          name: '総合図書館前（入口）',
+          reference_image_url: 'https://example.com/location.jpg',
+          created_at: new Date('2026-05-20T00:00:00.000Z'),
+          updated_at: new Date('2026-05-20T00:00:00.000Z'),
+        },
+      ],
+      created_at: new Date('2026-05-20T00:00:00.000Z'),
+      updated_at: new Date('2026-05-20T00:00:00.000Z'),
+    },
+  ]);
+});
+
 function createItemHandler(createItemUseCase: { execute: (...args: any[]) => Promise<unknown> }): TestHandler {
   const controller = new ItemController(
     createItemUseCase as any,
@@ -777,6 +832,14 @@ function createNotificationMarkReadHandler(
   );
 
   return controller.markRead.bind(controller) as unknown as TestHandler;
+}
+
+function createLocationGetHandler(
+  getLocationsUseCase: { execute: (...args: any[]) => Promise<unknown> },
+): TestHandler {
+  const controller = new LocationController(getLocationsUseCase as any);
+
+  return controller.getLocations as unknown as TestHandler;
 }
 
 function createNotificationUnreadCountHandler(
