@@ -41,6 +41,18 @@ export class EvaluationRepository implements IEvaluationRepository {
     }));
   }
 
+  async countVisibleReceivedByUserId(userId: string): Promise<number> {
+    return await prisma.evaluation.count({
+      where: {
+        target_user_id: userId,
+        OR: [
+          { type: { in: ['cancel', 'no_show'] } },
+          { transaction: { status: 'completed' } },
+        ],
+      },
+    });
+  }
+
   async submitEvaluationAtomically(
     transactionId: string,
     itemId: string,

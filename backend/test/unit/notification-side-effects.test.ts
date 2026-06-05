@@ -180,6 +180,7 @@ test('SubmitEvaluationUseCase asks the counterparty to submit evaluation when on
     {
       findByTransactionId: async () => assert.fail('not used'),
       findVisibleReceivedByUserId: async () => assert.fail('not used'),
+      countVisibleReceivedByUserId: async () => assert.fail('not used'),
       submitEvaluationAtomically: async () => ({
         id: '55555555-5555-4555-8555-555555555555',
         transaction_id: ids.transaction,

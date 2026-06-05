@@ -402,6 +402,58 @@ test('PATCH /api/users/me trims nickname and accepts nullable profile image URL'
   ]);
 });
 
+test('GET /api/users/:id/public-profile rejects invalid user id before usecase execution', async () => {
+  let called = false;
+  const handler = createUserPublicProfileHandler({
+    execute: async () => {
+      called = true;
+      throw new Error('should not be called');
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+    params: { id: 'bad-user-id' },
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(response.body, { error: '無効なユーザーID形式です' });
+  assert.equal(called, false);
+});
+
+test('GET /api/users/:id/public-profile returns public seller profile without email', async () => {
+  let capturedUserId: unknown;
+  const handler = createUserPublicProfileHandler({
+    execute: async (userId: string) => {
+      capturedUserId = userId;
+      return {
+        id: AUTH_USER_ID,
+        nickname: '阪大 太郎',
+        profile_image_url: 'https://example.com/profile.jpg',
+        credit_score: 120,
+        status: 'active',
+        evaluation_count: 4,
+      };
+    },
+  });
+
+  const response = await request(handler, {
+    token: authToken(),
+    params: { id: AUTH_USER_ID },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(capturedUserId, AUTH_USER_ID);
+  assert.deepEqual(response.body, {
+    id: AUTH_USER_ID,
+    nickname: '阪大 太郎',
+    profile_image_url: 'https://example.com/profile.jpg',
+    credit_score: 120,
+    status: 'active',
+    evaluation_count: 4,
+  });
+});
+
 test('POST /api/reports rejects invalid transaction_id before usecase execution', async () => {
   let called = false;
   const handler = createReportHandler({
@@ -797,9 +849,23 @@ function createUserUpdateHandler(
     { execute: async () => [] } as any,
     { execute: async () => null } as any,
     updateMyProfileUseCase as any,
+    { execute: async () => null } as any,
   );
 
   return controller.updateMe as unknown as TestHandler;
+}
+
+function createUserPublicProfileHandler(
+  getPublicUserProfileUseCase: { execute: (...args: any[]) => Promise<unknown> },
+): TestHandler {
+  const controller = new UserController(
+    { execute: async () => [] } as any,
+    { execute: async () => null } as any,
+    { execute: async () => null } as any,
+    getPublicUserProfileUseCase as any,
+  );
+
+  return controller.getPublicProfile as unknown as TestHandler;
 }
 
 function createReportHandler(

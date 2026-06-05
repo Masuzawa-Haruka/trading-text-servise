@@ -3,6 +3,7 @@ import { MOCK_AUTH_ENABLED } from "@/lib/auth/mock";
 import { mockStore } from "@/lib/mockStore";
 
 const MOCK_PROFILE_STORAGE_KEY = "mock_api_profile";
+const MOCK_SELLER_ID = "22222222-2222-4222-8222-222222222222";
 
 export type UserProfile = {
   id: string;
@@ -13,6 +14,15 @@ export type UserProfile = {
   status: string;
   created_at: string;
   updated_at: string;
+};
+
+export type PublicUserProfile = {
+  id: string;
+  nickname: string;
+  profile_image_url: string | null;
+  credit_score: number;
+  status: string;
+  evaluation_count: number;
 };
 
 export type UpdateUserProfilePayload = {
@@ -27,6 +37,17 @@ export async function getMyProfile(): Promise<UserProfile> {
 
   const response = await apiFetch("/api/users/me");
   return parseJsonResponse<UserProfile>(response, "プロフィールの取得に失敗しました");
+}
+
+export async function getPublicUserProfile(userId: string): Promise<PublicUserProfile> {
+  if (MOCK_AUTH_ENABLED) {
+    return mockPublicProfile(userId);
+  }
+
+  const response = await apiFetch(`/api/users/${encodeURIComponent(userId)}/public-profile`, {
+    requireAuth: false,
+  });
+  return parseJsonResponse<PublicUserProfile>(response, "出品者プロフィールの取得に失敗しました");
 }
 
 export async function updateMyProfile(payload: UpdateUserProfilePayload): Promise<UserProfile> {
@@ -101,6 +122,29 @@ function defaultMockProfile(): UserProfile {
     status: "active",
     created_at: now,
     updated_at: now,
+  };
+}
+
+function mockPublicProfile(userId: string): PublicUserProfile {
+  if (userId === mockStore.currentUser.id) {
+    const profile = readMockProfile();
+    return {
+      id: profile.id,
+      nickname: profile.nickname,
+      profile_image_url: profile.profile_image_url,
+      credit_score: profile.credit_score,
+      status: profile.status,
+      evaluation_count: mockStore.getReceivedEvaluations(profile.id).length,
+    };
+  }
+
+  return {
+    id: userId || MOCK_SELLER_ID,
+    nickname: "テスト出品者",
+    profile_image_url: null,
+    credit_score: 120,
+    status: "active",
+    evaluation_count: 6,
   };
 }
 
