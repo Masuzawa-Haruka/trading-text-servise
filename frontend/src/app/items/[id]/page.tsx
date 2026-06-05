@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { campusLabel, conditionLabel, getItem, type Item } from "@/lib/items/api";
 import { createTransactionForItem } from "@/lib/transactions/api";
+import { getPublicUserProfile, type PublicUserProfile } from "@/lib/users/api";
 
 export default function ItemDetailPage() {
   const params = useParams();
@@ -12,6 +13,7 @@ export default function ItemDetailPage() {
   const id = String(params.id);
 
   const [item, setItem] = useState<Item | null>(null);
+  const [sellerProfile, setSellerProfile] = useState<PublicUserProfile | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isStartingTransaction, setIsStartingTransaction] = useState(false);
@@ -21,13 +23,13 @@ export default function ItemDetailPage() {
   useEffect(() => {
     let isMounted = true;
 
-    Promise.all([
-      getItem(id),
-      createClient().auth.getUser(),
-    ])
-      .then(([foundItem, userResult]) => {
+    Promise.all([getItem(id), createClient().auth.getUser()])
+      .then(async ([foundItem, userResult]) => {
+        if (!isMounted) return;
+        const profile = await getPublicUserProfile(foundItem.seller_id).catch(() => null);
         if (!isMounted) return;
         setItem(foundItem);
+        setSellerProfile(profile);
         setCurrentUserId(userResult.data.user?.id ?? null);
       })
       .catch((err) => {
@@ -140,10 +142,21 @@ export default function ItemDetailPage() {
       <section className="mt-2 bg-white px-4 py-4 shadow-sm">
         <h3 className="mb-3 text-sm font-bold text-slate-700">出品者情報</h3>
         <div className="flex items-center gap-3">
-          <div className="grid size-12 shrink-0 place-items-center rounded-full bg-slate-200 text-xl">👤</div>
+          <SellerAvatar profile={sellerProfile} fallbackId={item.seller_id} />
           <div className="min-w-0 flex-1">
-            <div className="font-bold text-slate-900">出品者</div>
-            <div className="mt-1 truncate text-xs text-slate-600">ID: {item.seller_id}</div>
+            <div className="flex items-center gap-2">
+              <div className="truncate font-bold text-slate-900">{sellerProfile?.nickname ?? "出品者"}</div>
+              {sellerProfile ? (
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${scoreBadgeClass(sellerProfile.credit_score)}`}>
+                  {sellerProfile.credit_score}点
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
+              <span>評価 {sellerProfile ? `${sellerProfile.evaluation_count}件` : "未取得"}</span>
+              <span>{sellerProfile ? statusLabel(sellerProfile.status) : "プロフィール未取得"}</span>
+            </div>
+            <div className="mt-1 truncate text-[11px] text-slate-400">ID: {shortUserId(item.seller_id)}</div>
           </div>
         </div>
       </section>
@@ -168,4 +181,53 @@ export default function ItemDetailPage() {
       </div>
     </main>
   );
+}
+
+function SellerAvatar({
+  profile,
+  fallbackId,
+}: {
+  profile: PublicUserProfile | null;
+  fallbackId: string;
+}) {
+  const label = profile?.nickname?.trim() || fallbackId;
+  const initial = label.slice(0, 1).toUpperCase();
+
+  if (profile?.profile_image_url) {
+    return (
+      <div className="size-14 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={profile.profile_image_url} alt={profile.nickname} className="h-full w-full object-cover" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid size-14 shrink-0 place-items-center rounded-full bg-blue-50 text-lg font-black text-blue-700">
+      {initial}
+    </div>
+  );
+}
+
+function scoreBadgeClass(score: number): string {
+  if (score < 50) return "bg-red-100 text-red-700";
+  if (score < 80) return "bg-amber-100 text-amber-700";
+  return "bg-emerald-100 text-emerald-700";
+}
+
+function statusLabel(status: string): string {
+  switch (status) {
+    case "active":
+      return "利用中";
+    case "warning":
+      return "要注意";
+    case "suspended":
+      return "停止中";
+    default:
+      return status;
+  }
+}
+
+function shortUserId(id: string): string {
+  return id.length > 12 ? `${id.slice(0, 8)}...${id.slice(-4)}` : id;
 }

@@ -2,14 +2,17 @@ import { Request, Response } from 'express';
 import { NotFoundError, ValidationError } from '../../domain/errors';
 import { AuthRequest } from '../../middleware/auth';
 import { GetMyProfileUseCase } from '../../usecases/GetMyProfileUseCase';
+import { GetPublicUserProfileUseCase } from '../../usecases/GetPublicUserProfileUseCase';
 import { GetUsersUseCase } from '../../usecases/GetUsersUseCase';
 import { UpdateMyProfileUseCase } from '../../usecases/UpdateMyProfileUseCase';
+import { isValidUuid } from '../../lib/validation';
 
 export class UserController {
   constructor(
     private readonly getUsersUseCase: GetUsersUseCase,
     private readonly getMyProfileUseCase: GetMyProfileUseCase,
     private readonly updateMyProfileUseCase: UpdateMyProfileUseCase,
+    private readonly getPublicUserProfileUseCase: GetPublicUserProfileUseCase,
   ) {}
 
   getUsers = async (req: Request, res: Response): Promise<void> => {
@@ -30,6 +33,21 @@ export class UserController {
 
       const user = await this.getMyProfileUseCase.execute(req.user.id);
       res.status(200).json(user);
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  getPublicProfile = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = req.params.id;
+      if (!isValidUuid(userId)) {
+        res.status(400).json({ error: '無効なユーザーID形式です' });
+        return;
+      }
+
+      const profile = await this.getPublicUserProfileUseCase.execute(userId);
+      res.status(200).json(profile);
     } catch (error) {
       this.handleError(res, error);
     }

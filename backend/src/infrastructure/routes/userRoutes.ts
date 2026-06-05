@@ -3,24 +3,30 @@ import { UserController } from '../../interfaces/controllers/UserController';
 import { UserRepository } from '../repositories/UserRepository';
 import { authenticateToken } from '../../middleware/auth';
 import { GetMyProfileUseCase } from '../../usecases/GetMyProfileUseCase';
+import { GetPublicUserProfileUseCase } from '../../usecases/GetPublicUserProfileUseCase';
 import { GetUsersUseCase } from '../../usecases/GetUsersUseCase';
 import { UpdateMyProfileUseCase } from '../../usecases/UpdateMyProfileUseCase';
+import { EvaluationRepository } from '../repositories/EvaluationRepository';
 
 const router = Router();
 
 // 依存関係の注入 (Dependency Injection)
 const userRepository = new UserRepository();
+const evaluationRepository = new EvaluationRepository();
 const getUsersUseCase = new GetUsersUseCase(userRepository);
 const getMyProfileUseCase = new GetMyProfileUseCase(userRepository);
 const updateMyProfileUseCase = new UpdateMyProfileUseCase(userRepository);
+const getPublicUserProfileUseCase = new GetPublicUserProfileUseCase(userRepository, evaluationRepository);
 const userController = new UserController(
   getUsersUseCase,
   getMyProfileUseCase,
   updateMyProfileUseCase,
+  getPublicUserProfileUseCase,
 );
 
 router.get('/me', authenticateToken, userController.getMe);
 router.patch('/me', authenticateToken, userController.updateMe);
+router.get('/:id/public-profile', userController.getPublicProfile);
 
 // 開発環境以外ではユーザー一覧へのアクセスを制限する（データ保護）
 router.get('/', (req: Request, res: Response, next: NextFunction) => {

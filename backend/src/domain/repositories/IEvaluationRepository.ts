@@ -14,6 +14,9 @@ export interface IEvaluationRepository {
    */
   findVisibleReceivedByUserId(userId: string): Promise<ReceivedEvaluationEntity[]>;
 
+  /** 公開プロフィール向けに、表示可能な受領評価の件数を返す。 */
+  countVisibleReceivedByUserId(userId: string): Promise<number>;
+
   /**
    * 評価を保存し、双方の評価が揃った場合は原子的に完了処理（ステータス・スコア更新）を行う。
    */

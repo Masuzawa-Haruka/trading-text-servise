@@ -28,6 +28,7 @@ test('GetMyEvaluationsUseCase returns visible received evaluations for the authe
       capturedUserId = inputUserId;
       return visibleEvaluations;
     },
+    countVisibleReceivedByUserId: async () => assert.fail('not used'),
     submitEvaluationAtomically: async () => assert.fail('not used'),
   });
 
